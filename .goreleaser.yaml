@@ -1,0 +1,68 @@
+version: 2
+
+project_name: catsitter
+
+builds:
+  - id: catsitter
+    main: ./cmd/catsitter
+    binary: catsitter
+    goos:
+      - linux
+      - windows
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+    env:
+      - CGO_ENABLED=0
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w -X github.com/xanderwasserman/catsitter/internal/version.Version={{ .Version }}
+    overrides:
+      - goos: darwin
+        goarch: arm64
+        env:
+          - CGO_ENABLED=1
+      - goos: darwin
+        goarch: amd64
+        env:
+          - CGO_ENABLED=1
+          - CC=clang -arch x86_64
+
+archives:
+  - id: catsitter
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    wrap_in_directory: false
+    formats:
+      - tar.gz
+    format_overrides:
+      - goos: windows
+        formats:
+          - zip
+      - goos: darwin
+        formats:
+          - zip
+    files:
+      - LICENSE
+      - README.md
+      - src: packaging/icon.png
+        dst: icon.png
+
+checksum:
+  name_template: checksums.txt
+  algorithm: sha256
+
+source:
+  enabled: false
+
+changelog:
+  disable: true
+
+release:
+  extra_files:
+    - glob: install.sh
+    - glob: install.ps1
+
+snapshot:
+  version_template: "{{ .Version }}-next"
