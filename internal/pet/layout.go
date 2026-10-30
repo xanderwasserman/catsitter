@@ -97,3 +97,34 @@ func grabbedWindow(pointerX, pointerY, offsetX, offsetY int) (int, int) {
 func grabbedWindowFromCursor(windowX, windowY, cursorX, cursorY, offsetX, offsetY int) (int, int) {
 	return grabbedWindow(windowX+cursorX, windowY+cursorY, offsetX, offsetY)
 }
+
+// grab is the offset that keeps one press point under the pointer.
+// fromPress means x, y came from the button-press event, in window coordinates.
+type grab struct {
+	on        bool
+	fromPress bool
+	x, y      int
+}
+
+// stepGrab updates a drag for one frame.
+// press is a button-press event at the window-local position px, py.
+// just and cursor are the toolkit's button edge and cursor. They supply the
+// offset only when this gesture has no press event.
+// down is true while the button is held. A press event counts as down: the
+// toolkit does not see a forwarded press until the following frame, and a
+// pointer query on this frame can still report the button up.
+func stepGrab(g grab, press bool, px, py int, just bool, cx, cy int, down bool) grab {
+	if press {
+		down = true
+		g.on = true
+		g.fromPress = true
+		g.x, g.y = px, py
+	} else if !g.fromPress && !g.on && just {
+		g.on = true
+		g.x, g.y = cx, cy
+	}
+	if !down || !g.on {
+		return grab{}
+	}
+	return g
+}

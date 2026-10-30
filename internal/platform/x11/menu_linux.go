@@ -221,19 +221,29 @@ func (c *Client) drainPress() (x, y int16, saw bool) {
 			if e.Detail == 1 && !saw {
 				x, y, saw = e.EventX, e.EventY, true
 				c.pressDown = true
+				c.pressSeen = false
 			}
 			c.forward(c.pressWin, e.Bytes())
 		case xproto.ButtonReleaseEvent:
 			if e.Detail == 1 {
 				c.pressDown = false
+				c.pressSeen = false
 			}
 			c.forward(c.pressWin, e.Bytes())
 		case xproto.MotionNotifyEvent:
 			c.forward(c.pressWin, e.Bytes())
 		}
 	}
-	if c.pressDown && c.buttons()&xproto.ButtonMask1 == 0 {
-		c.pressDown = false
+	// The press event means the button is down. A pointer query can lag that
+	// event, so it may clear the button only after it has reported the button
+	// down once since the press.
+	if !saw && c.pressDown {
+		if c.buttons()&xproto.ButtonMask1 != 0 {
+			c.pressSeen = true
+		} else if c.pressSeen {
+			c.pressDown = false
+			c.pressSeen = false
+		}
 	}
 	if n > 0 {
 		_, _ = xproto.GetInputFocus(c.conn).Reply()

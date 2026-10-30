@@ -92,21 +92,21 @@ type game struct {
 	noteFocus    func()
 	restoreFocus func()
 
-	overlayDone        bool
-	overlayWarned      bool
-	overlayTries       int
-	menuSawFocus       bool
-	placed             bool
-	menu               bool
-	hidden             bool
-	haveCat            bool
-	catX, catY         int
-	savedX, savedY     int
-	lay                placement
-	dragging           bool
-	dragged            bool
-	dragAbs            bool
-	dragOffX, dragOffY int
+	overlayDone    bool
+	overlayWarned  bool
+	overlayTries   int
+	menuSawFocus   bool
+	placed         bool
+	menu           bool
+	hidden         bool
+	haveCat        bool
+	catX, catY     int
+	savedX, savedY int
+	lay            placement
+	dragging       bool
+	dragged        bool
+	dragAbs        bool
+	grab           grab
 }
 
 func (g *game) Layout(outsideWidth, outsideHeight int) (int, int) {
@@ -198,6 +198,7 @@ func (g *game) syncHidden(view control.View) {
 		g.savedX, g.savedY = g.catX, g.catY
 		g.menu = false
 		g.dragging = false
+		g.grab = grab{}
 		ebiten.SetWindowPosition(-3000, -3000)
 		g.hidden = true
 		return
@@ -261,35 +262,31 @@ func (g *game) pointer(view control.View) {
 	}
 	if consumed {
 		g.dragging = false
+		g.grab = grab{}
 		return
 	}
 	if !g.haveCat {
 		return
 	}
 	just := inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonLeft)
-	if !g.dragging && (pressed || just) {
+	down := held || pressed || ebiten.IsMouseButtonPressed(ebiten.MouseButtonLeft)
+	was := g.grab.on
+	g.grab = stepGrab(g.grab, pressed, px, py, just, cx, cy, down)
+	if g.grab.on && !was {
 		g.dragging = true
 		g.dragged = false
-		// The press position inside the window. The X event is that position;
-		// otherwise the cursor in this window is.
-		if pressed {
-			g.dragOffX, g.dragOffY = px, py
-		} else {
-			g.dragOffX, g.dragOffY = cx, cy
-		}
 		g.dragAbs = g.pointAt != nil
 	}
-	down := ebiten.IsMouseButtonPressed(ebiten.MouseButtonLeft) || held
-	if g.dragging {
+	if g.grab.on {
+		g.dragging = true
 		g.moveDrag(cx, cy)
+		return
 	}
-	if !down {
-		if g.dragging && g.dragged {
-			g.ctrl.SaveWindow(g.catX, g.catY)
-		}
-		g.dragging = false
-		g.dragged = false
+	if g.dragging && g.dragged {
+		g.ctrl.SaveWindow(g.catX, g.catY)
 	}
+	g.dragging = false
+	g.dragged = false
 }
 
 func (g *game) handBack() {
@@ -312,10 +309,10 @@ func (g *game) moveDrag(cx, cy int) {
 		if !ok {
 			return
 		}
-		nx, ny = grabbedWindow(x, y, g.dragOffX, g.dragOffY)
+		nx, ny = grabbedWindow(x, y, g.grab.x, g.grab.y)
 	} else {
 		wx, wy := ebiten.WindowPosition()
-		nx, ny = grabbedWindowFromCursor(wx, wy, cx, cy, g.dragOffX, g.dragOffY)
+		nx, ny = grabbedWindowFromCursor(wx, wy, cx, cy, g.grab.x, g.grab.y)
 	}
 	if nx != g.catX || ny != g.catY {
 		g.dragged = true

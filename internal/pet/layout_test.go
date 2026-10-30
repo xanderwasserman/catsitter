@@ -61,6 +61,47 @@ func TestGrabbedWindowKeepsTheGrabPoint(t *testing.T) {
 	}
 }
 
+func TestPressAnchorSurvivesTheFollowingCursor(t *testing.T) {
+	var g grab
+	// The pointer has already stepped 13,7 when the press frame runs.
+	// The toolkit button edge arrives on the next frame, another step later.
+	g = stepGrab(g, true, 48, 48, false, 61, 55, false)
+	g = stepGrab(g, false, 0, 0, true, 74, 62, true)
+	g = stepGrab(g, false, 0, 0, false, 87, 69, true)
+	if !g.on || !g.fromPress || g.x != 48 || g.y != 48 {
+		t.Fatalf("anchor %+v", g)
+	}
+	const winX, winY = 400, 300
+	pointerX := winX + 48 + 13*3
+	pointerY := winY + 48 + 7*3
+	gotX, gotY := grabbedWindow(pointerX, pointerY, g.x, g.y)
+	if gotX+g.x != pointerX || gotY+g.y != pointerY {
+		t.Fatalf("grab point %d,%d pointer %d,%d", gotX+g.x, gotY+g.y, pointerX, pointerY)
+	}
+}
+
+func TestLatePressReplacesTheCursorAnchor(t *testing.T) {
+	var g grab
+	g = stepGrab(g, false, 0, 0, true, 61, 55, true)
+	g = stepGrab(g, true, 48, 48, false, 74, 62, true)
+	if !g.fromPress || g.x != 48 || g.y != 48 {
+		t.Fatalf("anchor %+v", g)
+	}
+}
+
+func TestCursorAnchorWhenThereIsNoPressEvent(t *testing.T) {
+	var g grab
+	g = stepGrab(g, false, 0, 0, true, 40, 30, true)
+	g = stepGrab(g, false, 0, 0, false, 61, 55, true)
+	if !g.on || g.fromPress || g.x != 40 || g.y != 30 {
+		t.Fatalf("anchor %+v", g)
+	}
+	g = stepGrab(g, false, 0, 0, false, 61, 55, false)
+	if g.on {
+		t.Fatal("grab stayed down after release")
+	}
+}
+
 func TestCursorDragMatchesTheAbsoluteGrab(t *testing.T) {
 	const (
 		winX, winY = 1744, 964

@@ -47,6 +47,7 @@ type Client struct {
 	pressWin   xproto.Window
 	pressArmed bool
 	pressDown  bool
+	pressSeen  bool
 	lastX      int16
 	lastY      int16
 	havePos    bool
