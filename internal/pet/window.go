@@ -21,13 +21,14 @@ const (
 
 // Run shows the pet until the controller asks to quit.
 // The tray is started on the first frame so it shares the UI thread.
-func Run(p Pet, ctrl control.Controller, bar *tray.Handle) error {
+func Run(p Pet, ctrl control.Controller, bar *tray.Handle, pump func()) error {
 	catW, catH := p.Size()
 	ebiten.SetWindowDecorated(false)
 	ebiten.SetWindowFloating(true)
 	ebiten.SetWindowResizingMode(ebiten.WindowResizingModeDisabled)
 	ebiten.SetWindowTitle("Catsitter")
 	ebiten.SetWindowSize(catW, catH)
+	ebiten.SetWindowClosingHandled(true)
 	ebiten.SetTPS(12)
 	op := &ebiten.RunGameOptions{
 		ScreenTransparent: true,
@@ -40,6 +41,7 @@ func Run(p Pet, ctrl control.Controller, bar *tray.Handle) error {
 		catW:  catW,
 		catH:  catH,
 		pixel: ebiten.NewImage(1, 1),
+		pump:  pump,
 	}, op)
 }
 
@@ -51,6 +53,7 @@ type game struct {
 	catH int
 
 	pixel *ebiten.Image
+	pump  func()
 
 	placed           bool
 	menu             bool
@@ -88,6 +91,15 @@ func (g *game) screenSize() (int, int) {
 }
 
 func (g *game) Update() error {
+	if g.pump != nil {
+		g.pump()
+	}
+	// CloseMainWindow and the window's close button both arrive here.
+	// Quit first so Shutdown can save the config before the process ends.
+	if ebiten.IsWindowBeingClosed() {
+		g.ctrl.Quit()
+		return ebiten.Termination
+	}
 	view := g.ctrl.View()
 	if view.Quitting {
 		return ebiten.Termination
@@ -294,7 +306,7 @@ func menuRows(view control.View) []menuRow {
 		}
 		return "[ ] "
 	}
-	return []menuRow{
+	rows := []menuRow{
 		{id: "pause", label: pause},
 		{id: "inhibit", label: mark(view.Inhibit) + "Keep awake"},
 		{id: "mouse", label: mark(view.Mouse) + "Mouse jiggle"},
@@ -305,4 +317,8 @@ func menuRows(view control.View) []menuRow {
 		{id: "hide", label: hide},
 		{id: "quit", label: "Quit"},
 	}
+	if view.Trusted {
+		return rows
+	}
+	return append([]menuRow{{id: "access", label: "Accessibility is off"}}, rows...)
 }

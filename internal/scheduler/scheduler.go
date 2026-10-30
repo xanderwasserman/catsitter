@@ -205,13 +205,11 @@ func (s *Scheduler) setInhibit(on bool) {
 		err = s.inhibit.Release()
 	}
 	if err != nil {
-		if on && !s.inhibitWarn {
+		if !s.inhibitWarn {
 			s.inhibitWarn = true
 			log.Printf("sleep inhibitor: %v", err)
 		}
-		if on {
-			return
-		}
+		return
 	}
 	s.inhibitWarn = false
 	s.held = on

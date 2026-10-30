@@ -7,6 +7,7 @@ import (
 	"time"
 	"unsafe"
 
+	"github.com/xanderwasserman/catsitter/internal/platform"
 	"golang.org/x/sys/windows"
 )
 
@@ -73,7 +74,8 @@ func IdleTime() (time.Duration, error) {
 		return 0, fmt.Errorf("GetLastInputInfo: %v", err)
 	}
 	now, _, _ := procGetTickCount.Call()
-	ms := uint32(now) - info.DwTime
+	// dwTime and GetTickCount share a 32-bit clock. The subtraction wraps with it.
+	ms := IdleMillis(uint32(now), info.DwTime)
 	return time.Duration(ms) * time.Millisecond, nil
 }
 
@@ -100,28 +102,20 @@ func (Nudger) TapShift() error {
 }
 
 func (Nudger) SwitchWindows(modifier string, count int) error {
-	if count < 1 {
-		count = 1
-	}
 	vk := uint16(vkMenu)
 	if modifier == "cmd" {
 		vk = vkLWin
 	}
-	if err := keyTap(vk, false); err != nil {
-		return err
-	}
-	time.Sleep(20 * time.Millisecond)
-	for i := 0; i < count; i++ {
-		if err := keyTap(vkTab, false); err != nil {
-			return err
-		}
-		time.Sleep(30 * time.Millisecond)
-		if err := keyTap(vkTab, true); err != nil {
-			return err
-		}
-		time.Sleep(40 * time.Millisecond)
-	}
-	return keyTap(vk, true)
+	return platform.HoldAndTap(
+		func() error { return keyTap(vk, false) },
+		func() error { return keyTap(vk, true) },
+		func() error { return keyTap(vkTab, false) },
+		func() error { return keyTap(vkTab, true) },
+		count,
+		func() { time.Sleep(20 * time.Millisecond) },
+		func() { time.Sleep(30 * time.Millisecond) },
+		func() { time.Sleep(40 * time.Millisecond) },
+	)
 }
 
 func mouseMove(dx, dy int32) error {

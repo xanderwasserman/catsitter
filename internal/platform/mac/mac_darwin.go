@@ -77,6 +77,8 @@ import (
 	"fmt"
 	"os/exec"
 	"time"
+
+	"github.com/xanderwasserman/catsitter/internal/platform"
 )
 
 // Inhibitor holds IOPM assertions for idle display sleep and idle system sleep.
@@ -137,42 +139,45 @@ const (
 type Nudger struct{}
 
 func (Nudger) Jiggle(pixels int) error {
-	if pixels < 1 {
-		pixels = 1
-	}
-	var x, y C.double
-	C.csMouse(&x, &y)
-	C.csMove(x+C.double(pixels), y)
-	time.Sleep(30 * time.Millisecond)
-	C.csMove(x, y)
-	return nil
+	return RunOnMain(func() error {
+		if pixels < 1 {
+			pixels = 1
+		}
+		var x, y C.double
+		C.csMouse(&x, &y)
+		C.csMove(x+C.double(pixels), y)
+		time.Sleep(30 * time.Millisecond)
+		C.csMove(x, y)
+		return nil
+	})
 }
 
 func (Nudger) TapShift() error {
-	tap(vkShift, flagShift)
-	return nil
+	return RunOnMain(func() error {
+		tap(vkShift, flagShift)
+		return nil
+	})
 }
 
 func (Nudger) SwitchWindows(modifier string, count int) error {
-	if count < 1 {
-		count = 1
-	}
-	code := C.ushort(vkOption)
-	flags := C.ulonglong(flagOption)
-	if modifier == "cmd" {
-		code = vkCommand
-		flags = flagCommand
-	}
-	C.csKey(code, 1, flags)
-	time.Sleep(20 * time.Millisecond)
-	for i := 0; i < count; i++ {
-		C.csKey(vkTab, 1, flags)
-		time.Sleep(30 * time.Millisecond)
-		C.csKey(vkTab, 0, flags)
-		time.Sleep(40 * time.Millisecond)
-	}
-	C.csKey(code, 0, 0)
-	return nil
+	return RunOnMain(func() error {
+		code := C.ushort(vkOption)
+		flags := C.ulonglong(flagOption)
+		if modifier == "cmd" {
+			code = vkCommand
+			flags = flagCommand
+		}
+		return platform.HoldAndTap(
+			func() error { C.csKey(code, 1, flags); return nil },
+			func() error { C.csKey(code, 0, 0); return nil },
+			func() error { C.csKey(vkTab, 1, flags); return nil },
+			func() error { C.csKey(vkTab, 0, flags); return nil },
+			count,
+			func() { time.Sleep(20 * time.Millisecond) },
+			func() { time.Sleep(30 * time.Millisecond) },
+			func() { time.Sleep(40 * time.Millisecond) },
+		)
+	})
 }
 
 func tap(code C.ushort, flags C.ulonglong) {

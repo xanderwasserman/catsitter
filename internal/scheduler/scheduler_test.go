@@ -284,6 +284,49 @@ func TestStopReleases(t *testing.T) {
 	}
 }
 
+func TestReleaseFailureStaysHeld(t *testing.T) {
+	inh := &releaseFailInhibit{fail: true}
+	s := New(&fakeIdle{d: 0}, &fakeNudge{}, inh, &fakeClock{t: time.Unix(0, 0)}, nil, nil)
+	st := baseSettings()
+	st.Mouse, st.Shift = false, false
+	s.Update(st)
+	s.Tick()
+	if !s.held {
+		t.Fatal("acquire did not hold")
+	}
+	s.Stop()
+	if !s.held {
+		t.Fatal("failed release cleared the hold")
+	}
+	if inh.releases != 1 {
+		t.Fatalf("releases = %d", inh.releases)
+	}
+	s.Stop()
+	if inh.releases != 2 || !s.held {
+		t.Fatalf("retry releases=%d held=%v", inh.releases, s.held)
+	}
+	inh.fail = false
+	s.Stop()
+	if s.held {
+		t.Fatal("release should clear the hold once it succeeds")
+	}
+}
+
+type releaseFailInhibit struct {
+	fail     bool
+	releases int
+}
+
+func (r *releaseFailInhibit) Acquire() error { return nil }
+
+func (r *releaseFailInhibit) Release() error {
+	r.releases++
+	if r.fail {
+		return errors.New("stuck")
+	}
+	return nil
+}
+
 func TestInhibitFailureDoesNotStick(t *testing.T) {
 	inh := &fakeInhibit{failOn: true}
 	s := New(&fakeIdle{d: 0}, &fakeNudge{}, inh, &fakeClock{t: time.Unix(0, 0)}, nil, nil)

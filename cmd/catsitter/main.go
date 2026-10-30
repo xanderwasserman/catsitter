@@ -47,7 +47,7 @@ func main() {
 	session := app.New(cfg, path, backends)
 	session.Start()
 	defer session.Shutdown()
-	if err := pet.Run(cat.New(), session, tray.New(session)); err != nil {
+	if err := pet.Run(cat.New(), session, tray.New(session), backends.Pump); err != nil {
 		log.Fatal(err)
 	}
 }

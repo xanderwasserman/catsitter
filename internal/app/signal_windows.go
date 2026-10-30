@@ -2,8 +2,13 @@
 
 package app
 
-import "os"
+import (
+	"os"
+	"syscall"
+)
 
 func listenSignals() []os.Signal {
-	return []os.Signal{os.Interrupt}
+	// Interrupt is Ctrl+C and Ctrl+Break.
+	// SIGTERM is console close, logoff, and shutdown.
+	return []os.Signal{os.Interrupt, syscall.SIGTERM}
 }

@@ -15,6 +15,9 @@ type Backends struct {
 	Inhibit platform.Inhibitor
 	Gate    platform.Gate
 	Close   func()
+	// Pump runs queued main-thread work. The pet window calls it every frame.
+	// It is nil where input does not need the main thread.
+	Pump func()
 }
 
 type idleFunc func() (time.Duration, error)

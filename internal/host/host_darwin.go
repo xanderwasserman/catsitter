@@ -17,5 +17,6 @@ func Open() Backends {
 		Inhibit: mac.Inhibitor{},
 		Gate:    macGate{},
 		Close:   func() {},
+		Pump:    mac.Drain,
 	}
 }

@@ -9,6 +9,7 @@ set -eu
 REPO="${CATSITTER_REPO:-xanderwasserman/catsitter}"
 RELEASE_BASE="${CATSITTER_RELEASE_BASE:-}"
 
+main() {
 die() {
 	echo "catsitter install: $*" >&2
 	exit 1
@@ -268,3 +269,6 @@ if [ "$was_running" -eq 1 ]; then
 	start_app
 	echo "Restarted Catsitter."
 fi
+}
+
+main "$@"

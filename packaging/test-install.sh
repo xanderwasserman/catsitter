@@ -219,7 +219,7 @@ while kill -0 "$after" >/dev/null 2>&1; do
 	sleep 0.1
 done
 
-# The first stub was replaced by the update and should already be gone.
+# The process id captured before the update is not running.
 if kill -0 "$stub_pid" >/dev/null 2>&1; then
 	die "the first process is still running"
 fi

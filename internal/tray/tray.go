@@ -50,6 +50,9 @@ func (h *Handle) Stop() {
 func (h *Handle) ready() {
 	systray.SetIcon(iconPNG())
 	systray.SetTooltip("Catsitter")
+	access := systray.AddMenuItem("Accessibility is off. Nudges are waiting.", "macOS Accessibility permission")
+	access.Disable()
+	access.Hide()
 	pause := systray.AddMenuItem("Pause", "Pause or resume")
 	systray.AddSeparator()
 	inhibit := systray.AddMenuItemCheckbox("Keep awake", "Sleep inhibitor", true)
@@ -96,6 +99,13 @@ func (h *Handle) ready() {
 				view := h.ctrl.View()
 				if view.Quitting {
 					return
+				}
+				if view.Trusted {
+					access.Hide()
+					systray.SetTooltip("Catsitter")
+				} else {
+					access.Show()
+					systray.SetTooltip("Catsitter: Accessibility is off, so nudges wait")
 				}
 				if view.Paused {
 					pause.SetTitle("Resume")

@@ -101,11 +101,34 @@ function Test-CatsitterRunning {
 }
 
 function Wait-CatsitterExit {
-    if (-not (Test-CatsitterRunning)) {
+    $procs = @(Get-Process -Name 'catsitter' -ErrorAction SilentlyContinue)
+    if ($procs.Count -eq 0) {
         return
     }
-    Stop-Process -Name 'catsitter' -Force -ErrorAction SilentlyContinue
-    $deadline = (Get-Date).AddSeconds(10)
+    $asked = $false
+    foreach ($proc in $procs) {
+        try {
+            if ($proc.CloseMainWindow()) {
+                $asked = $true
+            }
+        }
+        catch {
+            Write-Verbose 'Close request was not delivered.'
+        }
+    }
+    if ($asked) {
+        $grace = (Get-Date).AddSeconds(8)
+        while (Test-CatsitterRunning) {
+            if ((Get-Date) -gt $grace) {
+                break
+            }
+            Start-Sleep -Milliseconds 200
+        }
+    }
+    if (Test-CatsitterRunning) {
+        Stop-Process -Name 'catsitter' -Force -ErrorAction SilentlyContinue
+    }
+    $deadline = (Get-Date).AddSeconds(5)
     while (Test-CatsitterRunning) {
         if ((Get-Date) -gt $deadline) {
             Write-InstallFailure 'Catsitter is still running'

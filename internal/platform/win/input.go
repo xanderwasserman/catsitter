@@ -38,3 +38,10 @@ func InputBytes() int {
 func KeyInputBytes() int {
 	return int(unsafe.Sizeof(KeyInput{}))
 }
+
+// IdleMillis is the elapsed time between two 32-bit tick counts.
+// GetLastInputInfo stamps dwTime from the same clock as GetTickCount,
+// so a uint32 subtraction stays correct when the clock wraps.
+func IdleMillis(now, last uint32) uint32 {
+	return now - last
+}

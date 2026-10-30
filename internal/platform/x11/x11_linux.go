@@ -14,6 +14,7 @@ import (
 	"github.com/jezek/xgb/screensaver"
 	"github.com/jezek/xgb/xproto"
 	"github.com/jezek/xgb/xtest"
+	"github.com/xanderwasserman/catsitter/internal/platform"
 )
 
 const (
@@ -143,9 +144,6 @@ func (c *Client) TapShift() error {
 
 // SwitchWindows holds Alt or Super and taps Tab count times.
 func (c *Client) SwitchWindows(modifier string, count int) error {
-	if count < 1 {
-		count = 1
-	}
 	sym := uint32(xkAltL)
 	if modifier == "cmd" {
 		sym = xkSuperL
@@ -158,21 +156,16 @@ func (c *Client) SwitchWindows(modifier string, count int) error {
 	if err != nil {
 		return err
 	}
-	if err := c.keyEvent(xproto.KeyPress, mod); err != nil {
-		return err
-	}
-	time.Sleep(20 * time.Millisecond)
-	for i := 0; i < count; i++ {
-		if err := c.keyEvent(xproto.KeyPress, tab); err != nil {
-			return err
-		}
-		time.Sleep(30 * time.Millisecond)
-		if err := c.keyEvent(xproto.KeyRelease, tab); err != nil {
-			return err
-		}
-		time.Sleep(40 * time.Millisecond)
-	}
-	return c.keyEvent(xproto.KeyRelease, mod)
+	return platform.HoldAndTap(
+		func() error { return c.keyEvent(xproto.KeyPress, mod) },
+		func() error { return c.keyEvent(xproto.KeyRelease, mod) },
+		func() error { return c.keyEvent(xproto.KeyPress, tab) },
+		func() error { return c.keyEvent(xproto.KeyRelease, tab) },
+		count,
+		func() { time.Sleep(20 * time.Millisecond) },
+		func() { time.Sleep(30 * time.Millisecond) },
+		func() { time.Sleep(40 * time.Millisecond) },
+	)
 }
 
 func (c *Client) key(sym uint32) (xproto.Keycode, error) {
