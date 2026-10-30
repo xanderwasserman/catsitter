@@ -1,0 +1,6 @@
+/catsitter
+/catsitter.exe
+/dist/
+/output/
+*.test
+/coverage.out
