@@ -6,10 +6,9 @@
 #   iex "& { $(irm https://github.com/xanderwasserman/catsitter/releases/latest/download/install.ps1) } --uninstall"
 #Requires -Version 5.1
 
-[CmdletBinding()]
+[CmdletBinding(PositionalBinding = $false)]
 param(
     [string]$Version = '',
-    [Alias('uninstall')]
     [switch]$Uninstall,
     [Parameter(ValueFromRemainingArguments = $true)]
     [string[]]$Rest
