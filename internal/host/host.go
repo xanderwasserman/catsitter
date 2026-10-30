@@ -21,6 +21,13 @@ type Backends struct {
 	// Overlay keeps the pet window out of the taskbar and the window switcher.
 	// It is nil where there is nothing to change. A non-nil error means try again.
 	Overlay func() error
+	// MenuGrab takes keyboard and pointer input while the cat menu is open
+	// and reports a press outside the window or Escape. Nil where the window
+	// already receives those events.
+	MenuGrab func(open bool) bool
+	// Pointer returns the pointer in window-position units.
+	// deviceScale is the monitor scale. ok is false when it is unavailable.
+	Pointer func(deviceScale float64) (x, y int, ok bool)
 }
 
 type idleFunc func() (time.Duration, error)

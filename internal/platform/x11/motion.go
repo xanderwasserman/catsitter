@@ -9,8 +9,9 @@ func relativeMotion(dx, dy int16) (eventType byte, detail byte, root xproto.Wind
 	return xproto.MotionNotify, 1, 0, dx, dy
 }
 
-// skipStateData is the _NET_WM_STATE client message for adding two states.
-// The first word is _NET_WM_STATE_ADD. The last source word is the application.
-func skipStateData(taskbar, pager xproto.Atom) []uint32 {
-	return []uint32{1, uint32(taskbar), uint32(pager), 1, 0}
+// stateAdd is a _NET_WM_STATE client message that adds up to two states.
+// The first word is _NET_WM_STATE_ADD. A zero atom adds only the first.
+// The fourth word is the application source.
+func stateAdd(first, second xproto.Atom) []uint32 {
+	return []uint32{1, uint32(first), uint32(second), 1, 0}
 }

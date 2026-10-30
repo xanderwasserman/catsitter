@@ -21,9 +21,22 @@ const (
 	menuPad = 8
 )
 
+// Desktop is the platform glue the pet window needs.
+type Desktop struct {
+	Pump    func()
+	Overlay func() error
+	// MenuGrab takes keyboard and pointer input while the menu is open and
+	// reports a press outside the window or Escape. Nil where the window
+	// already receives those events.
+	MenuGrab func(open bool) bool
+	// Pointer returns the pointer in window-position units.
+	// deviceScale is the monitor scale. ok is false when it is unavailable.
+	Pointer func(deviceScale float64) (x, y int, ok bool)
+}
+
 // Run shows the pet until the controller asks to quit.
 // The tray is started on the first frame so it shares the UI thread.
-func Run(p Pet, ctrl control.Controller, bar *tray.Handle, pump func(), overlay func() error) error {
+func Run(p Pet, ctrl control.Controller, bar *tray.Handle, desk Desktop) error {
 	catW, catH := p.Size()
 	ebiten.SetWindowDecorated(false)
 	ebiten.SetWindowFloating(true)
@@ -39,14 +52,16 @@ func Run(p Pet, ctrl control.Controller, bar *tray.Handle, pump func(), overlay 
 		X11InstanceName:   "catsitter",
 	}
 	return ebiten.RunGameWithOptions(&game{
-		pet:     p,
-		ctrl:    ctrl,
-		tray:    bar,
-		catW:    catW,
-		catH:    catH,
-		pixel:   ebiten.NewImage(1, 1),
-		pump:    pump,
-		overlay: overlay,
+		pet:      p,
+		ctrl:     ctrl,
+		tray:     bar,
+		catW:     catW,
+		catH:     catH,
+		pixel:    ebiten.NewImage(1, 1),
+		pump:     desk.Pump,
+		overlay:  desk.Overlay,
+		menuGrab: desk.MenuGrab,
+		pointAt:  desk.Pointer,
 	}, op)
 }
 
@@ -57,45 +72,39 @@ type game struct {
 	catW int
 	catH int
 
-	pixel   *ebiten.Image
-	pump    func()
-	overlay func() error
+	pixel    *ebiten.Image
+	pump     func()
+	overlay  func() error
+	menuGrab func(open bool) bool
+	pointAt  func(deviceScale float64) (x, y int, ok bool)
 
-	overlayDone      bool
-	overlayWarned    bool
-	overlayTries     int
-	menuSawFocus     bool
-	placed           bool
-	menu             bool
-	hidden           bool
-	savedX, savedY   int
-	dragging         bool
-	dragStartWindowX int
-	dragStartWindowY int
-	dragStartCursorX int
-	dragStartCursorY int
-	cursorToWindowX  float64
-	cursorToWindowY  float64
-	dragged          bool
+	overlayDone    bool
+	overlayWarned  bool
+	overlayTries   int
+	menuSawFocus   bool
+	placed         bool
+	menu           bool
+	hidden         bool
+	haveCat        bool
+	catX, catY     int
+	savedX, savedY int
+	lay            placement
+	dragging       bool
+	dragged        bool
+	dragAbs        bool
+	dragCatX       int
+	dragCatY       int
+	dragPtrX       int
+	dragPtrY       int
 }
 
 func (g *game) Layout(outsideWidth, outsideHeight int) (int, int) {
-	w, h := g.screenSize()
-	if w > 0 && h > 0 {
-		g.cursorToWindowX = float64(outsideWidth) / float64(w)
-		g.cursorToWindowY = float64(outsideHeight) / float64(h)
-	}
-	return w, h
+	return g.screenSize()
 }
 
 func (g *game) screenSize() (int, int) {
-	if g.menu {
-		h := g.catH
-		need := menuPad*2 + len(menuRows(g.ctrl.View()))*rowH
-		if need > h {
-			h = need
-		}
-		return g.catW + menuW, h
+	if g.menu && g.lay.Window.W > 0 && g.lay.Window.H > 0 {
+		return g.lay.Window.W, g.lay.Window.H
 	}
 	return g.catW, g.catH
 }
@@ -124,17 +133,24 @@ func (g *game) Update() error {
 	}
 	g.syncHidden(view)
 	if g.hidden {
+		g.syncMenuGrab()
 		ebiten.SetTPS(2)
 		return nil
 	}
-	ebiten.SetTPS(12)
-	g.syncWindowSize()
+	if g.menu {
+		ebiten.SetTPS(60)
+	} else {
+		ebiten.SetTPS(12)
+	}
 	g.pointer(view)
+	g.applyWindow(monitorSize())
 	return nil
 }
 
 func (g *game) place(view control.View) {
 	if view.WindowSet {
+		g.catX, g.catY = view.WindowX, view.WindowY
+		g.haveCat = true
 		ebiten.SetWindowPosition(view.WindowX, view.WindowY)
 		return
 	}
@@ -150,6 +166,8 @@ func (g *game) place(view control.View) {
 	if y < 16 {
 		y = 16
 	}
+	g.catX, g.catY = x, y
+	g.haveCat = true
 	ebiten.SetWindowPosition(x, y)
 	g.ctrl.SaveWindow(x, y)
 }
@@ -159,23 +177,17 @@ func (g *game) syncHidden(view control.View) {
 		return
 	}
 	if view.Hidden {
-		g.savedX, g.savedY = ebiten.WindowPosition()
+		g.savedX, g.savedY = g.catX, g.catY
 		g.menu = false
 		g.dragging = false
 		ebiten.SetWindowPosition(-3000, -3000)
 		g.hidden = true
 		return
 	}
+	g.catX, g.catY = g.savedX, g.savedY
+	g.haveCat = true
 	ebiten.SetWindowPosition(g.savedX, g.savedY)
 	g.hidden = false
-}
-
-func (g *game) syncWindowSize() {
-	w, h := g.screenSize()
-	ww, wh := ebiten.WindowSize()
-	if ww != w || wh != h {
-		ebiten.SetWindowSize(w, h)
-	}
 }
 
 // keepOutOfSwitcher applies the platform hint on every frame. Resizing the
@@ -201,27 +213,35 @@ func (g *game) keepOutOfSwitcher() {
 
 func (g *game) pointer(view control.View) {
 	cx, cy := ebiten.CursorPosition()
+	outside := false
+	if g.menu && g.menuGrab != nil && g.menuGrab(true) {
+		outside = true
+	}
 	open, saw, activate, consumed := nextMenu(g.menu, menuEvent{
 		Right:    inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonRight),
 		Left:     inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonLeft),
 		Escape:   inpututil.IsKeyJustPressed(ebiten.KeyEscape),
+		Outside:  outside,
 		Focused:  ebiten.IsFocused(),
 		SawFocus: g.menuSawFocus,
-		OnMenu:   cx >= g.catW,
+		OnMenu:   g.lay.Menu.contains(cx, cy),
 	})
 	if activate {
-		g.activate(cy, view)
+		g.activate(cy-g.lay.Menu.Y, view)
 	}
 	g.menu = open
 	g.menuSawFocus = saw
+	g.syncMenuGrab()
 	if consumed {
 		g.dragging = false
 		return
 	}
+	if !g.haveCat {
+		return
+	}
 	if !ebiten.IsMouseButtonPressed(ebiten.MouseButtonLeft) {
 		if g.dragging && g.dragged {
-			x, y := ebiten.WindowPosition()
-			g.ctrl.SaveWindow(x, y)
+			g.ctrl.SaveWindow(g.catX, g.catY)
 		}
 		g.dragging = false
 		g.dragged = false
@@ -230,20 +250,81 @@ func (g *game) pointer(view control.View) {
 	if inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonLeft) {
 		g.dragging = true
 		g.dragged = false
-		g.dragStartWindowX, g.dragStartWindowY = ebiten.WindowPosition()
-		g.dragStartCursorX, g.dragStartCursorY = cx, cy
+		g.dragCatX, g.dragCatY = g.catX, g.catY
+		if x, y, ok := g.samplePointer(); ok {
+			g.dragAbs = true
+			g.dragPtrX, g.dragPtrY = x, y
+		} else {
+			g.dragAbs = false
+			g.dragPtrX, g.dragPtrY = cx, cy
+		}
 		return
 	}
 	if !g.dragging {
 		return
 	}
-	dx := int(float64(cx-g.dragStartCursorX) * g.cursorToWindowX)
-	dy := int(float64(cy-g.dragStartCursorY) * g.cursorToWindowY)
-	if dx != 0 || dy != 0 {
+	var nx, ny int
+	if g.dragAbs {
+		x, y, ok := g.samplePointer()
+		if !ok {
+			return
+		}
+		nx, ny = draggedOrigin(g.dragCatX, g.dragCatY, g.dragPtrX, g.dragPtrY, x, y)
+	} else {
+		// The cursor is window-local. The press-time offset stays under it.
+		wx, wy := ebiten.WindowPosition()
+		nx = wx + cx - g.dragPtrX
+		ny = wy + cy - g.dragPtrY
+	}
+	if nx != g.catX || ny != g.catY {
 		g.dragged = true
 	}
+	g.catX, g.catY = nx, ny
+}
+
+func (g *game) samplePointer() (int, int, bool) {
+	if g.pointAt == nil {
+		return 0, 0, false
+	}
+	scale := 1.0
+	if mon := ebiten.Monitor(); mon != nil && mon.DeviceScaleFactor() > 0 {
+		scale = mon.DeviceScaleFactor()
+	}
+	return g.pointAt(scale)
+}
+
+func (g *game) syncMenuGrab() {
+	if g.menuGrab == nil {
+		return
+	}
+	g.menuGrab(g.menu)
+}
+
+func monitorSize() (int, int) {
+	mon := ebiten.Monitor()
+	if mon == nil {
+		return 0, 0
+	}
+	return mon.Size()
+}
+
+func (g *game) applyWindow(screenW, screenH int) {
+	if !g.haveCat || g.hidden {
+		return
+	}
+	menuH := 0
+	if g.menu {
+		menuH = menuPad*2 + len(menuRows(g.ctrl.View()))*rowH
+	}
+	g.lay = placePet(g.menu, g.catX, g.catY, g.catW, g.catH, menuW, menuH, screenW, screenH)
 	wx, wy := ebiten.WindowPosition()
-	ebiten.SetWindowPosition(wx+dx, wy+dy)
+	if wx != g.lay.Window.X || wy != g.lay.Window.Y {
+		ebiten.SetWindowPosition(g.lay.Window.X, g.lay.Window.Y)
+	}
+	ww, wh := ebiten.WindowSize()
+	if ww != g.lay.Window.W || wh != g.lay.Window.H {
+		ebiten.SetWindowSize(g.lay.Window.W, g.lay.Window.H)
+	}
 }
 
 func (g *game) activate(cy int, view control.View) {
@@ -287,23 +368,23 @@ func (g *game) Draw(screen *ebiten.Image) {
 		if fw > 0 {
 			op.GeoM.Scale(float64(g.catW)/fw, float64(g.catH)/fw)
 		}
+		op.GeoM.Translate(float64(g.lay.Cat.X), float64(g.lay.Cat.Y))
 		op.Filter = ebiten.FilterNearest
 		screen.DrawImage(frame, op)
 	}
-	if !g.menu {
+	if !g.menu || g.lay.Menu.W <= 0 {
 		return
 	}
-	_, h := g.screenSize()
 	g.pixel.Fill(color.White)
 	op := &ebiten.DrawImageOptions{}
-	op.GeoM.Scale(float64(menuW), float64(h))
-	op.GeoM.Translate(float64(g.catW), 0)
+	op.GeoM.Scale(float64(g.lay.Menu.W), float64(g.lay.Menu.H))
+	op.GeoM.Translate(float64(g.lay.Menu.X), float64(g.lay.Menu.Y))
 	op.ColorScale.ScaleWithColor(color.RGBA{42, 33, 28, 235})
 	screen.DrawImage(g.pixel, op)
 	rows := menuRows(view)
 	ink := color.RGBA{255, 246, 234, 255}
 	for i, row := range rows {
-		text.Draw(screen, row.label, basicfont.Face7x13, g.catW+12, menuPad+i*rowH+14, ink)
+		text.Draw(screen, row.label, basicfont.Face7x13, g.lay.Menu.X+12, g.lay.Menu.Y+menuPad+i*rowH+14, ink)
 	}
 }
 

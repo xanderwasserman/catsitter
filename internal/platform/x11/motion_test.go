@@ -17,15 +17,23 @@ func TestRelativeMotionNudgesByDelta(t *testing.T) {
 	}
 }
 
-func TestSkipStateDataAddsBothStates(t *testing.T) {
-	got := skipStateData(11, 22)
-	want := []uint32{1, 11, 22, 1, 0}
+func TestStateAdd(t *testing.T) {
+	if got, want := stateAdd(11, 22), []uint32{1, 11, 22, 1, 0}; !sameWords(got, want) {
+		t.Fatalf("pair %v", got)
+	}
+	if got, want := stateAdd(7, 0), []uint32{1, 7, 0, 1, 0}; !sameWords(got, want) {
+		t.Fatalf("above %v", got)
+	}
+}
+
+func sameWords(got, want []uint32) bool {
 	if len(got) != len(want) {
-		t.Fatalf("%v", got)
+		return false
 	}
 	for i := range want {
 		if got[i] != want[i] {
-			t.Fatalf("%v", got)
+			return false
 		}
 	}
+	return true
 }

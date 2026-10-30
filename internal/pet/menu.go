@@ -5,6 +5,7 @@ type menuEvent struct {
 	Right    bool
 	Left     bool
 	Escape   bool
+	Outside  bool
 	Focused  bool
 	SawFocus bool
 	OnMenu   bool
@@ -20,7 +21,7 @@ func nextMenu(open bool, ev menuEvent) (openOut bool, sawFocus bool, activate bo
 		}
 		return false, false, false, false
 	}
-	if ev.Escape || (ev.SawFocus && !ev.Focused) {
+	if ev.Escape || ev.Outside || (ev.SawFocus && !ev.Focused) {
 		return false, false, false, true
 	}
 	if ev.Right {

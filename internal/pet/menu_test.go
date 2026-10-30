@@ -32,6 +32,11 @@ func TestMenuClosesOnSelectionEscapeAndOutside(t *testing.T) {
 	if !open || saw || consumed {
 		t.Fatalf("unfocused before focus: open=%v saw=%v cons=%v", open, saw, consumed)
 	}
+
+	open, _, _, consumed = nextMenu(true, menuEvent{Outside: true})
+	if open || !consumed {
+		t.Fatalf("desktop click: open=%v cons=%v", open, consumed)
+	}
 }
 
 func TestMenuClosedLeftClickIsNotConsumed(t *testing.T) {

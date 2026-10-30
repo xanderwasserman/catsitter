@@ -29,5 +29,7 @@ func Open() Backends {
 	b.Nudge = client
 	b.Close = client.Close
 	b.Overlay = func() error { return client.ExcludeFromSwitcher(platform.OverlayTitle) }
+	b.MenuGrab = func(open bool) bool { return client.MenuGrab(platform.OverlayTitle, open) }
+	b.Pointer = client.Pointer
 	return b
 }

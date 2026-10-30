@@ -16,5 +16,6 @@ func Open() Backends {
 		Gate:    openGate{},
 		Close:   func() {},
 		Overlay: func() error { return win.ExcludeFromSwitcher(platform.OverlayTitle) },
+		Pointer: win.Pointer,
 	}
 }

@@ -36,6 +36,14 @@ type Client struct {
 	xmu      sync.Mutex
 	atoms    map[string]xproto.Atom
 	petWin   xproto.Window
+	menuWin  xproto.Window
+	menuPtr  bool
+	menuKey  bool
+	menuArm  bool
+	menuBtns uint16
+	menuEsc  bool
+	escCode  xproto.Keycode
+	escKnown bool
 	lastX    int16
 	lastY    int16
 	havePos  bool
@@ -200,8 +208,8 @@ func (c *Client) keyEvent(kind byte, code xproto.Keycode) error {
 }
 
 // ExcludeFromSwitcher marks the pet window so the taskbar, pager, and
-// Alt+Tab skip it. The window type is a notification, which window
-// managers leave out of the switcher.
+// Alt+Tab skip it, and keeps it above other windows. The window type is
+// a notification, which window managers leave out of the switcher.
 func (c *Client) ExcludeFromSwitcher(title string) error {
 	c.xmu.Lock()
 	defer c.xmu.Unlock()
@@ -233,16 +241,27 @@ func (c *Client) ExcludeFromSwitcher(title string) error {
 	if err != nil {
 		return err
 	}
+	c.addState(win, state, taskbar, pager)
+	above, err := c.atom("_NET_WM_STATE_ABOVE")
+	if err != nil {
+		return err
+	}
+	c.addState(win, state, above, 0)
+	_, err = xproto.GetInputFocus(c.conn).Reply()
+	return err
+}
+
+// addState asks the window manager to add one or two _NET_WM_STATE flags.
+// A zero second atom adds only the first.
+func (c *Client) addState(win xproto.Window, state, first, second xproto.Atom) {
 	ev := xproto.ClientMessageEvent{
 		Format: 32,
 		Window: win,
 		Type:   state,
-		Data:   xproto.ClientMessageDataUnionData32New(skipStateData(taskbar, pager)),
+		Data:   xproto.ClientMessageDataUnionData32New(stateAdd(first, second)),
 	}
 	mask := uint32(xproto.EventMaskSubstructureRedirect | xproto.EventMaskSubstructureNotify)
 	xproto.SendEvent(c.conn, false, c.root, mask, string(ev.Bytes()))
-	_, err = xproto.GetInputFocus(c.conn).Reply()
-	return err
 }
 
 func (c *Client) petWindow(title string) (xproto.Window, bool) {
