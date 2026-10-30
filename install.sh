@@ -100,6 +100,16 @@ start_app() {
 	)
 }
 
+warn_path() {
+	[ "$goos" = "linux" ] || return 0
+	case ":$PATH:" in
+	*":$HOME/.local/bin:"* | *":$HOME/.local/bin/:"*) return 0 ;;
+	esac
+	echo "catsitter install: ~/.local/bin is not on PATH. Add this line to your shell profile:" >&2
+	# shellcheck disable=SC2016
+	echo 'export PATH="$HOME/.local/bin:$PATH"' >&2
+}
+
 remove_install() {
 	if [ "$goos" = "darwin" ]; then
 		rm -rf "$HOME/Applications/Catsitter.app"
@@ -265,10 +275,13 @@ EOF
 	echo "Installed Catsitter $ver to $install_bin"
 fi
 
+start_app
 if [ "$was_running" -eq 1 ]; then
-	start_app
 	echo "Restarted Catsitter."
+else
+	echo "Started Catsitter."
 fi
+warn_path
 }
 
 main "$@"

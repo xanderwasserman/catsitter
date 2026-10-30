@@ -7,6 +7,7 @@ package x11
 
 import (
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -32,6 +33,8 @@ type Client struct {
 	keys map[uint32]xproto.Keycode
 
 	mu       sync.Mutex
+	xmu      sync.Mutex
+	atoms    map[string]xproto.Atom
 	lastX    int16
 	lastY    int16
 	havePos  bool
@@ -93,6 +96,8 @@ func (c *Client) cacheKeys(setup *xproto.SetupInfo) error {
 // IdleTime prefers the X screensaver idle counter and falls back to how
 // long the pointer has stayed still.
 func (c *Client) IdleTime() (time.Duration, error) {
+	c.xmu.Lock()
+	defer c.xmu.Unlock()
 	if c.ss {
 		reply, err := screensaver.QueryInfo(c.conn, xproto.Drawable(c.root)).Reply()
 		if err == nil {
@@ -177,14 +182,152 @@ func (c *Client) key(sym uint32) (xproto.Keycode, error) {
 }
 
 func (c *Client) relMove(dx, dy int16) error {
-	// root 0 means a relative motion for XTEST MotionNotify.
-	xtest.FakeInput(c.conn, xproto.MotionNotify, 0, xproto.TimeCurrentTime, 0, dx, dy, 0)
+	c.xmu.Lock()
+	defer c.xmu.Unlock()
+	eventType, detail, root, x, y := relativeMotion(dx, dy)
+	xtest.FakeInput(c.conn, eventType, detail, xproto.TimeCurrentTime, root, x, y, 0)
 	_, err := xproto.GetInputFocus(c.conn).Reply()
 	return err
 }
 
 func (c *Client) keyEvent(kind byte, code xproto.Keycode) error {
+	c.xmu.Lock()
+	defer c.xmu.Unlock()
 	xtest.FakeInput(c.conn, kind, byte(code), xproto.TimeCurrentTime, c.root, 0, 0, 0)
 	_, err := xproto.GetInputFocus(c.conn).Reply()
 	return err
+}
+
+// ExcludeFromSwitcher marks the pet window so the taskbar, pager, and
+// Alt+Tab skip it. The window type is a notification, which window
+// managers leave out of the switcher.
+func (c *Client) ExcludeFromSwitcher(title string) error {
+	c.xmu.Lock()
+	defer c.xmu.Unlock()
+	win, ok := c.findPet(title)
+	if !ok {
+		return fmt.Errorf("window %q was not found", title)
+	}
+	typ, err := c.atom("_NET_WM_WINDOW_TYPE")
+	if err != nil {
+		return err
+	}
+	note, err := c.atom("_NET_WM_WINDOW_TYPE_NOTIFICATION")
+	if err != nil {
+		return err
+	}
+	buf := make([]byte, 4)
+	xgb.Put32(buf, uint32(note))
+	xproto.ChangeProperty(c.conn, xproto.PropModeReplace, win, typ, xproto.AtomAtom, 32, 1, buf)
+
+	state, err := c.atom("_NET_WM_STATE")
+	if err != nil {
+		return err
+	}
+	taskbar, err := c.atom("_NET_WM_STATE_SKIP_TASKBAR")
+	if err != nil {
+		return err
+	}
+	pager, err := c.atom("_NET_WM_STATE_SKIP_PAGER")
+	if err != nil {
+		return err
+	}
+	ev := xproto.ClientMessageEvent{
+		Format: 32,
+		Window: win,
+		Type:   state,
+		Data:   xproto.ClientMessageDataUnionData32New(skipStateData(taskbar, pager)),
+	}
+	mask := uint32(xproto.EventMaskSubstructureRedirect | xproto.EventMaskSubstructureNotify)
+	xproto.SendEvent(c.conn, false, c.root, mask, string(ev.Bytes()))
+	_, err = xproto.GetInputFocus(c.conn).Reply()
+	return err
+}
+
+func (c *Client) findPet(title string) (xproto.Window, bool) {
+	var titleHit, classHit xproto.Window
+	var haveTitle bool
+	c.walk(c.root, 0, func(w xproto.Window) bool {
+		if strings.Contains(strings.ToLower(c.wmClass(w)), "catsitter") {
+			classHit = w
+			return true
+		}
+		if !haveTitle && c.wmName(w) == title {
+			titleHit = w
+			haveTitle = true
+		}
+		return false
+	})
+	if classHit != 0 {
+		return classHit, true
+	}
+	if haveTitle {
+		return titleHit, true
+	}
+	return 0, false
+}
+
+func (c *Client) walk(w xproto.Window, depth int, visit func(xproto.Window) bool) bool {
+	if depth > 16 {
+		return false
+	}
+	if visit(w) {
+		return true
+	}
+	tree, err := xproto.QueryTree(c.conn, w).Reply()
+	if err != nil {
+		return false
+	}
+	for _, child := range tree.Children {
+		if c.walk(child, depth+1, visit) {
+			return true
+		}
+	}
+	return false
+}
+
+func (c *Client) wmName(w xproto.Window) string {
+	if name := c.propString(w, "_NET_WM_NAME"); name != "" {
+		return name
+	}
+	return c.propBytes(w, xproto.AtomWmName)
+}
+
+func (c *Client) wmClass(w xproto.Window) string {
+	return c.propBytes(w, xproto.AtomWmClass)
+}
+
+func (c *Client) propString(w xproto.Window, name string) string {
+	atom, err := c.atom(name)
+	if err != nil {
+		return ""
+	}
+	return c.prop(w, atom)
+}
+
+func (c *Client) propBytes(w xproto.Window, atom xproto.Atom) string {
+	return c.prop(w, atom)
+}
+
+func (c *Client) prop(w xproto.Window, atom xproto.Atom) string {
+	reply, err := xproto.GetProperty(c.conn, false, w, atom, xproto.AtomAny, 0, 128).Reply()
+	if err != nil || len(reply.Value) == 0 {
+		return ""
+	}
+	return strings.TrimRight(string(reply.Value), "\x00")
+}
+
+func (c *Client) atom(name string) (xproto.Atom, error) {
+	if a, ok := c.atoms[name]; ok {
+		return a, nil
+	}
+	reply, err := xproto.InternAtom(c.conn, false, uint16(len(name)), name).Reply()
+	if err != nil {
+		return 0, err
+	}
+	if c.atoms == nil {
+		c.atoms = map[string]xproto.Atom{}
+	}
+	c.atoms[name] = reply.Atom
+	return reply.Atom, nil
 }

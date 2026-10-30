@@ -34,20 +34,20 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	cfg, err := config.Load(path)
+	saved, err := config.Load(path)
 	if err != nil {
 		log.Fatal(err)
 	}
-	cfg, err = flags.Apply(cfg)
+	live, err := flags.Apply(saved)
 	if err != nil {
 		log.Fatal(err)
 	}
 	backends := host.Open()
 	defer backends.Close()
-	session := app.New(cfg, path, backends)
+	session := app.New(live, saved, path, backends)
 	session.Start()
 	defer session.Shutdown()
-	if err := pet.Run(cat.New(), session, tray.New(session), backends.Pump); err != nil {
+	if err := pet.Run(cat.New(), session, tray.New(session), backends.Pump, backends.Overlay); err != nil {
 		log.Fatal(err)
 	}
 }

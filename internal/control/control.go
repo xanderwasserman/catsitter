@@ -91,7 +91,7 @@ func IntervalLabel(d time.Duration) string {
 // DurationLabel renders a short limit name.
 func DurationLabel(d time.Duration) string {
 	if d <= 0 {
-		return "until I stop it"
+		return "Until I stop it"
 	}
 	if d%time.Hour == 0 {
 		return fmt.Sprintf("%dh", int(d/time.Hour))
@@ -100,4 +100,12 @@ func DurationLabel(d time.Duration) string {
 		return fmt.Sprintf("%dm", int(d/time.Minute))
 	}
 	return d.String()
+}
+
+// WatchLabel is the menu line for how long Catsitter keeps watch.
+func WatchLabel(d time.Duration) string {
+	if d <= 0 {
+		return "Until I stop it"
+	}
+	return "For " + DurationLabel(d)
 }

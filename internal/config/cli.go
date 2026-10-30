@@ -53,7 +53,7 @@ func ParseFlags(argv []string, out io.Writer) (Flags, error) {
 	fs.IntVar(&f.Seconds, "seconds", 0, "idle seconds before a nudge (default 10)")
 	fs.IntVar(&f.Pixels, "pixels", 0, "mouse jiggle distance in pixels (default 1)")
 	fs.StringVar(&f.Mode, "mode", "", "actions to enable: m mouse, k shift, s switch windows (default mk)")
-	fs.IntVar(&f.Tabs, "tabs", -1, "window switches per nudge; 0 means a random 1 to 3")
+	fs.IntVar(&f.Tabs, "tabs", 0, "window switches per nudge; 0 means a random 1 to 3 (default 1)")
 	fs.StringVar(&f.Key, "key", "", "switch modifier: alt or cmd (default cmd on macOS, alt elsewhere)")
 	fs.StringVar(&f.Duration, "duration", "", "how long to keep watch, for example 10m, 2h, 1.5h, 2h30m, 90s")
 	fs.BoolVar(&f.NoPet, "no-pet", false, "hide the cat and keep working")

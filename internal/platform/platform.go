@@ -4,6 +4,9 @@ package platform
 
 import "time"
 
+// OverlayTitle is the pet window title and X11 class.
+const OverlayTitle = "Catsitter"
+
 // Inhibitor holds a native sleep and display-sleep assertion.
 // Acquire and Release are idempotent for a single holder.
 type Inhibitor interface {

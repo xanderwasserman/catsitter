@@ -5,6 +5,7 @@ package host
 import (
 	"log"
 
+	"github.com/xanderwasserman/catsitter/internal/platform"
 	"github.com/xanderwasserman/catsitter/internal/platform/inhibit"
 	"github.com/xanderwasserman/catsitter/internal/platform/x11"
 )
@@ -27,5 +28,6 @@ func Open() Backends {
 	b.Idle = client
 	b.Nudge = client
 	b.Close = client.Close
+	b.Overlay = func() error { return client.ExcludeFromSwitcher(platform.OverlayTitle) }
 	return b
 }

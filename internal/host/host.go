@@ -18,6 +18,9 @@ type Backends struct {
 	// Pump runs queued main-thread work. The pet window calls it every frame.
 	// It is nil where input does not need the main thread.
 	Pump func()
+	// Overlay keeps the pet window out of the taskbar and the window switcher.
+	// It is nil where there is nothing to change. A non-nil error means try again.
+	Overlay func() error
 }
 
 type idleFunc func() (time.Duration, error)

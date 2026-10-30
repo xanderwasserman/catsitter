@@ -22,6 +22,7 @@ import (
 type App struct {
 	mu        sync.Mutex
 	cfg       config.Config
+	saved     config.Config
 	path      string
 	paused    bool
 	sched     *scheduler.Scheduler
@@ -34,10 +35,13 @@ type App struct {
 	prompted  atomic.Bool
 }
 
-// New prepares a session. Call Start to run the scheduler.
-func New(cfg config.Config, path string, b host.Backends) *App {
+// New prepares a session. live is what this run uses, including one-off
+// command-line flags. saved is the copy written to disk. Call Start to
+// run the scheduler.
+func New(live, saved config.Config, path string, b host.Backends) *App {
 	a := &App{
-		cfg:     cfg,
+		cfg:     live,
+		saved:   saved,
 		path:    path,
 		gate:    b.Gate,
 		closeFn: b.Close,
@@ -125,7 +129,7 @@ func (a *App) Shutdown() {
 		a.sched.Stop()
 	}
 	a.mu.Lock()
-	cfg := a.cfg
+	cfg := a.saved
 	path := a.path
 	a.mu.Unlock()
 	if path != "" {
@@ -188,6 +192,7 @@ func (a *App) SetInterval(d time.Duration) {
 	if a.cfg.Interval == "" {
 		a.cfg.Interval = "10s"
 	}
+	a.saved.Interval = a.cfg.Interval
 	a.pushLocked()
 	a.saveLocked()
 }
@@ -196,6 +201,7 @@ func (a *App) SetDuration(d time.Duration) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	a.cfg.Duration = config.FormatDuration(d)
+	a.saved.Duration = a.cfg.Duration
 	a.pushLocked()
 	a.saveLocked()
 }
@@ -204,6 +210,7 @@ func (a *App) ToggleHidden() {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	a.cfg.HidePet = !a.cfg.HidePet
+	a.saved.HidePet = a.cfg.HidePet
 	a.saveLocked()
 }
 
@@ -226,6 +233,9 @@ func (a *App) SaveWindow(x, y int) {
 	a.cfg.WindowX = x
 	a.cfg.WindowY = y
 	a.cfg.WindowSet = true
+	a.saved.WindowX = x
+	a.saved.WindowY = y
+	a.saved.WindowSet = true
 	a.saveLocked()
 }
 
@@ -233,6 +243,7 @@ func (a *App) setBool(fn func(*config.Config)) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	fn(&a.cfg)
+	fn(&a.saved)
 	a.pushLocked()
 	a.saveLocked()
 }
@@ -266,7 +277,7 @@ func (a *App) saveLocked() {
 	if a.path == "" {
 		return
 	}
-	if err := config.Save(a.path, a.cfg); err != nil {
+	if err := config.Save(a.path, a.saved); err != nil {
 		log.Printf("save config: %v", err)
 	}
 }

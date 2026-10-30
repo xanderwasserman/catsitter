@@ -18,5 +18,6 @@ func Open() Backends {
 		Gate:    macGate{},
 		Close:   func() {},
 		Pump:    mac.Drain,
+		Overlay: mac.ExcludeFromSwitcher,
 	}
 }

@@ -2,7 +2,10 @@
 
 package host
 
-import "github.com/xanderwasserman/catsitter/internal/platform/win"
+import (
+	"github.com/xanderwasserman/catsitter/internal/platform"
+	"github.com/xanderwasserman/catsitter/internal/platform/win"
+)
 
 // Open wires Win32 idle time, SendInput, and SetThreadExecutionState.
 func Open() Backends {
@@ -12,5 +15,6 @@ func Open() Backends {
 		Inhibit: &win.Inhibitor{},
 		Gate:    openGate{},
 		Close:   func() {},
+		Overlay: func() error { return win.ExcludeFromSwitcher(platform.OverlayTitle) },
 	}
 }

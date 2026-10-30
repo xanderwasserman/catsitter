@@ -125,7 +125,7 @@ func (h *Handle) ready() {
 				for i, item := range intervalItems {
 					setCheck(item, control.Intervals[i] == view.Interval)
 				}
-				duration.SetTitle("For " + control.DurationLabel(view.Duration))
+				duration.SetTitle(control.WatchLabel(view.Duration))
 				for i, item := range durationItems {
 					setCheck(item, control.Durations[i] == view.Duration)
 				}

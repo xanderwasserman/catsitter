@@ -7,8 +7,10 @@ package inhibit
 
 import (
 	"fmt"
+	"log"
 	"os"
 	"os/exec"
+	"strings"
 	"syscall"
 	"time"
 
@@ -16,51 +18,79 @@ import (
 )
 
 // Inhibitor is the Linux sleep inhibitor.
+// It holds system sleep and, when a desktop offers it, screen blank and lock.
 type Inhibitor struct {
-	release func() error
+	releases []func() error
 }
 
-// Acquire holds one inhibitor. A second call while held does nothing.
+// Acquire holds sleep and screen inhibitors. A second call while held does nothing.
 func (i *Inhibitor) Acquire() error {
-	if i.release != nil {
+	if len(i.releases) > 0 {
 		return nil
 	}
-	var errs []error
+	var held []func() error
+	var notes []string
+	haveSleep := false
 	if rel, err := inhibitLogind(); err == nil {
-		i.release = rel
-		return nil
+		held = append(held, rel)
+		haveSleep = true
 	} else {
-		errs = append(errs, err)
+		notes = append(notes, "logind: "+err.Error())
+		if rel, err := inhibitSystemd(); err == nil {
+			held = append(held, rel)
+			haveSleep = true
+		} else {
+			notes = append(notes, "systemd-inhibit: "+err.Error())
+		}
+	}
+
+	haveScreen := false
+	gnomeFlags := uint32(8) // inhibit session idle
+	if !haveSleep {
+		gnomeFlags |= 4 // inhibit suspend
 	}
 	if rel, err := inhibitScreenSaver(); err == nil {
-		i.release = rel
-		return nil
+		held = append(held, rel)
+		haveScreen = true
 	} else {
-		errs = append(errs, err)
+		notes = append(notes, "screensaver: "+err.Error())
+		if rel, err := inhibitGnome(gnomeFlags); err == nil {
+			held = append(held, rel)
+			haveScreen = true
+		} else {
+			notes = append(notes, "gnome session: "+err.Error())
+		}
 	}
-	if rel, err := inhibitGnome(); err == nil {
-		i.release = rel
-		return nil
-	} else {
-		errs = append(errs, err)
+	if len(held) == 0 {
+		return fmt.Errorf("no sleep inhibitor available (%s)", strings.Join(notes, "; "))
 	}
-	if rel, err := inhibitSystemd(); err == nil {
-		i.release = rel
-		return nil
-	} else {
-		errs = append(errs, err)
+	if !haveSleep {
+		log.Printf("system sleep is not inhibited (%s)", strings.Join(notes, "; "))
 	}
-	return fmt.Errorf("no sleep inhibitor available: %v", errs)
+	if !haveScreen {
+		log.Printf("the screen can still lock or blank (%s)", strings.Join(notes, "; "))
+	}
+	i.releases = held
+	return nil
 }
 
-// Release drops the inhibitor.
+// Release drops every inhibitor that was acquired.
 func (i *Inhibitor) Release() error {
-	if i.release == nil {
-		return nil
-	}
-	err := i.release()
-	i.release = nil
+	left, err := dropReleased(i.releases)
+	i.releases = left
 	return err
+}
+
+func dropReleased(rels []func() error) (left []func() error, err error) {
+	for _, rel := range rels {
+		if e := rel(); e != nil {
+			if err == nil {
+				err = e
+			}
+			left = append(left, rel)
+		}
+	}
+	return left, err
 }
 
 func inhibitLogind() (func() error, error) {
@@ -116,7 +146,7 @@ func inhibitScreenSaver() (func() error, error) {
 	return nil, first
 }
 
-func inhibitGnome() (func() error, error) {
+func inhibitGnome(flags uint32) (func() error, error) {
 	conn, err := dbus.SessionBus()
 	if err != nil {
 		return nil, err
@@ -124,7 +154,7 @@ func inhibitGnome() (func() error, error) {
 	var cookie uint32
 	err = conn.Object("org.gnome.SessionManager", "/org/gnome/SessionManager").Call(
 		"org.gnome.SessionManager.Inhibit", 0,
-		"catsitter", uint32(0), "Catsitter is keeping watch", uint32(8),
+		"catsitter", uint32(0), "Catsitter is keeping watch", flags,
 	).Store(&cookie)
 	if err != nil {
 		return nil, err

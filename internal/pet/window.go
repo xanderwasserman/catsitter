@@ -2,6 +2,7 @@ package pet
 
 import (
 	"image/color"
+	"log"
 	"time"
 
 	"github.com/hajimehoshi/ebiten/v2"
@@ -10,6 +11,7 @@ import (
 	"golang.org/x/image/font/basicfont"
 
 	"github.com/xanderwasserman/catsitter/internal/control"
+	"github.com/xanderwasserman/catsitter/internal/platform"
 	"github.com/xanderwasserman/catsitter/internal/tray"
 )
 
@@ -21,27 +23,30 @@ const (
 
 // Run shows the pet until the controller asks to quit.
 // The tray is started on the first frame so it shares the UI thread.
-func Run(p Pet, ctrl control.Controller, bar *tray.Handle, pump func()) error {
+func Run(p Pet, ctrl control.Controller, bar *tray.Handle, pump func(), overlay func() error) error {
 	catW, catH := p.Size()
 	ebiten.SetWindowDecorated(false)
 	ebiten.SetWindowFloating(true)
 	ebiten.SetWindowResizingMode(ebiten.WindowResizingModeDisabled)
-	ebiten.SetWindowTitle("Catsitter")
+	ebiten.SetWindowTitle(platform.OverlayTitle)
 	ebiten.SetWindowSize(catW, catH)
 	ebiten.SetWindowClosingHandled(true)
 	ebiten.SetTPS(12)
 	op := &ebiten.RunGameOptions{
 		ScreenTransparent: true,
 		SkipTaskbar:       true,
+		X11ClassName:      platform.OverlayTitle,
+		X11InstanceName:   "catsitter",
 	}
 	return ebiten.RunGameWithOptions(&game{
-		pet:   p,
-		ctrl:  ctrl,
-		tray:  bar,
-		catW:  catW,
-		catH:  catH,
-		pixel: ebiten.NewImage(1, 1),
-		pump:  pump,
+		pet:     p,
+		ctrl:    ctrl,
+		tray:    bar,
+		catW:    catW,
+		catH:    catH,
+		pixel:   ebiten.NewImage(1, 1),
+		pump:    pump,
+		overlay: overlay,
 	}, op)
 }
 
@@ -52,9 +57,14 @@ type game struct {
 	catW int
 	catH int
 
-	pixel *ebiten.Image
-	pump  func()
+	pixel   *ebiten.Image
+	pump    func()
+	overlay func() error
 
+	overlayDone      bool
+	overlayWarned    bool
+	overlayTries     int
+	menuSawFocus     bool
 	placed           bool
 	menu             bool
 	hidden           bool
@@ -94,6 +104,7 @@ func (g *game) Update() error {
 	if g.pump != nil {
 		g.pump()
 	}
+	g.keepOutOfSwitcher()
 	// CloseMainWindow and the window's close button both arrive here.
 	// Quit first so Shutdown can save the config before the process ends.
 	if ebiten.IsWindowBeingClosed() {
@@ -167,10 +178,40 @@ func (g *game) syncWindowSize() {
 	}
 }
 
+func (g *game) keepOutOfSwitcher() {
+	if g.overlay == nil || g.overlayDone {
+		return
+	}
+	if err := g.overlay(); err != nil {
+		if !g.overlayWarned {
+			log.Printf("window switcher: %v", err)
+			g.overlayWarned = true
+		}
+		g.overlayTries++
+		if g.overlayTries >= 60 {
+			g.overlayDone = true
+		}
+		return
+	}
+	g.overlayDone = true
+}
+
 func (g *game) pointer(view control.View) {
 	cx, cy := ebiten.CursorPosition()
-	if inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonRight) {
-		g.menu = !g.menu
+	open, saw, activate, consumed := nextMenu(g.menu, menuEvent{
+		Right:    inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonRight),
+		Left:     inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonLeft),
+		Escape:   inpututil.IsKeyJustPressed(ebiten.KeyEscape),
+		Focused:  ebiten.IsFocused(),
+		SawFocus: g.menuSawFocus,
+		OnMenu:   cx >= g.catW,
+	})
+	if activate {
+		g.activate(cy, view)
+	}
+	g.menu = open
+	g.menuSawFocus = saw
+	if consumed {
 		g.dragging = false
 		return
 	}
@@ -184,10 +225,6 @@ func (g *game) pointer(view control.View) {
 		return
 	}
 	if inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonLeft) {
-		if g.menu && cx >= g.catW {
-			g.activate(cy, view)
-			return
-		}
 		g.dragging = true
 		g.dragged = false
 		g.dragStartWindowX, g.dragStartWindowY = ebiten.WindowPosition()
@@ -313,7 +350,7 @@ func menuRows(view control.View) []menuRow {
 		{id: "shift", label: mark(view.Shift) + "Shift tap"},
 		{id: "switch", label: mark(view.Switch) + "Switch windows"},
 		{id: "interval", label: "Idle every " + control.IntervalLabel(view.Interval)},
-		{id: "duration", label: "For " + control.DurationLabel(view.Duration)},
+		{id: "duration", label: control.WatchLabel(view.Duration)},
 		{id: "hide", label: hide},
 		{id: "quit", label: "Quit"},
 	}

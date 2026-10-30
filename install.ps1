@@ -150,6 +150,17 @@ function Invoke-CatsitterLaunch {
     Start-Process -FilePath $installExe -WorkingDirectory $installDir | Out-Null
 }
 
+function Write-CatsitterPathWarning {
+    $dir = $installDir.TrimEnd('\')
+    foreach ($part in ($env:PATH -split ';')) {
+        if ($part.TrimEnd('\').ToLowerInvariant() -eq $dir.ToLowerInvariant()) {
+            return
+        }
+    }
+    Write-InstallMessage "Catsitter's folder is not on PATH. To run it from a terminal, add this line to your PowerShell profile:"
+    Write-InstallMessage '$env:Path = "$env:LOCALAPPDATA\Programs\Catsitter;" + $env:Path'
+}
+
 if ($Uninstall) {
     Wait-CatsitterExit
     Clear-CatsitterInstall
@@ -257,10 +268,13 @@ try {
     $shortcut.Save()
 
     Write-InstallMessage "Installed Catsitter $ver to $installDir"
+    Invoke-CatsitterLaunch
     if ($wasRunning) {
-        Invoke-CatsitterLaunch
         Write-InstallMessage 'Restarted Catsitter.'
+    } else {
+        Write-InstallMessage 'Started Catsitter.'
     }
+    Write-CatsitterPathWarning
 }
 finally {
     if (Test-Path -LiteralPath $tempRoot) {

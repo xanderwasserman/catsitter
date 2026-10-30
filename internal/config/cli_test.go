@@ -2,6 +2,9 @@ package config
 
 import (
 	"bytes"
+	"errors"
+	"flag"
+	"strings"
 	"testing"
 	"time"
 )
@@ -68,6 +71,21 @@ func TestRejectsBadMode(t *testing.T) {
 	}
 	if _, err := f.Apply(Defaults()); err == nil {
 		t.Fatal("expected error")
+	}
+}
+
+func TestTabsHelpDefault(t *testing.T) {
+	var buf bytes.Buffer
+	_, err := ParseFlags([]string{"catsitter", "--help"}, &buf)
+	if !errors.Is(err, flag.ErrHelp) {
+		t.Fatal(err)
+	}
+	text := buf.String()
+	if strings.Contains(text, "-1") {
+		t.Fatalf("help still shows -1:\n%s", text)
+	}
+	if !strings.Contains(text, "default 1") {
+		t.Fatalf("help:\n%s", text)
 	}
 }
 

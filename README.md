@@ -16,7 +16,7 @@ Windows (PowerShell):
 irm https://github.com/xanderwasserman/catsitter/releases/latest/download/install.ps1 | iex
 ```
 
-Nothing needs sudo or an administrator. The script picks the archive for this machine from the latest GitHub release, checks it against `checksums.txt`, and installs it. Run the same command again later to update. If that version is already installed, it leaves the app alone. If Catsitter is running, the script stops it, replaces the files, and starts it again.
+Nothing needs sudo or an administrator. The script picks the archive for this machine from the latest GitHub release, checks it against `checksums.txt`, installs it, and starts Catsitter. Run the same command again later to update. If that version is already installed, it leaves the app alone. If Catsitter is running, the script stops it, replaces the files, and starts it again. On Linux it prints the `PATH` line to add when `~/.local/bin` is missing from `PATH`.
 
 A pipe does not forward arguments. Pin a version or uninstall like this:
 
@@ -54,6 +54,8 @@ catsitter --mode mk --tabs 0 --key alt
 catsitter --no-pet
 catsitter --version
 ```
+
+Command-line flags last for that run. The tray and the cat menu are what get written to the settings file.
 
 Window switch is Cmd+Tab on macOS and Alt+Tab elsewhere. `--tabs 0` switches a random one to three windows. Duration accepts `10m`, `2h`, `1.5h`, `2h30m`, `90s`, and the longer names (`minutes`, `hours`, `seconds`). `unlimited`, `forever`, and `until I stop it` mean no limit.
 
