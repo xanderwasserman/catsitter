@@ -35,6 +35,7 @@ type Client struct {
 	mu       sync.Mutex
 	xmu      sync.Mutex
 	atoms    map[string]xproto.Atom
+	petWin   xproto.Window
 	lastX    int16
 	lastY    int16
 	havePos  bool
@@ -204,7 +205,7 @@ func (c *Client) keyEvent(kind byte, code xproto.Keycode) error {
 func (c *Client) ExcludeFromSwitcher(title string) error {
 	c.xmu.Lock()
 	defer c.xmu.Unlock()
-	win, ok := c.findPet(title)
+	win, ok := c.petWindow(title)
 	if !ok {
 		return fmt.Errorf("window %q was not found", title)
 	}
@@ -242,6 +243,17 @@ func (c *Client) ExcludeFromSwitcher(title string) error {
 	xproto.SendEvent(c.conn, false, c.root, mask, string(ev.Bytes()))
 	_, err = xproto.GetInputFocus(c.conn).Reply()
 	return err
+}
+
+func (c *Client) petWindow(title string) (xproto.Window, bool) {
+	if c.petWin != 0 && strings.Contains(strings.ToLower(c.wmClass(c.petWin)), "catsitter") {
+		return c.petWin, true
+	}
+	win, ok := c.findPet(title)
+	if ok {
+		c.petWin = win
+	}
+	return win, ok
 }
 
 func (c *Client) findPet(title string) (xproto.Window, bool) {

@@ -178,6 +178,8 @@ func (g *game) syncWindowSize() {
 	}
 }
 
+// keepOutOfSwitcher applies the platform hint on every frame. Resizing the
+// window replaces the macOS collection behavior, so one application is not enough.
 func (g *game) keepOutOfSwitcher() {
 	if g.overlay == nil || g.overlayDone {
 		return
@@ -193,7 +195,8 @@ func (g *game) keepOutOfSwitcher() {
 		}
 		return
 	}
-	g.overlayDone = true
+	g.overlayTries = 0
+	g.overlayWarned = false
 }
 
 func (g *game) pointer(view control.View) {
