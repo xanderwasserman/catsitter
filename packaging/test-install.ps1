@@ -20,10 +20,10 @@ switch ($native) {
 }
 
 $work = Join-Path ([System.IO.Path]::GetTempPath()) ("catsitter-test-" + [guid]::NewGuid().ToString('n'))
-$home = Join-Path $work 'home'
+$fixtureHome = Join-Path $work 'home'
 $serverRoot = Join-Path $work 'www'
 $marker = Join-Path $work 'marker'
-New-Item -ItemType Directory -Force -Path $home, $serverRoot | Out-Null
+New-Item -ItemType Directory -Force -Path $fixtureHome, $serverRoot | Out-Null
 
 $server = $null
 function Stop-Fixture {
@@ -37,7 +37,7 @@ function Stop-Fixture {
         catch {
             $path = ''
         }
-        if ($path -and $path.StartsWith($script:home)) {
+        if ($path -and $path.StartsWith($script:fixtureHome)) {
             Stop-Process -Id $_.Id -Force -ErrorAction SilentlyContinue
         }
     }
@@ -107,8 +107,8 @@ try {
         throw 'fixture server did not start'
     }
 
-    $env:LOCALAPPDATA = Join-Path $home 'Local'
-    $env:APPDATA = Join-Path $home 'Roaming'
+    $env:LOCALAPPDATA = Join-Path $fixtureHome 'Local'
+    $env:APPDATA = Join-Path $fixtureHome 'Roaming'
     New-Item -ItemType Directory -Force -Path $env:LOCALAPPDATA, $env:APPDATA | Out-Null
     $env:CATSITTER_RELEASE_BASE = $base
     $env:CATSITTER_STUB_MARKER = $marker
