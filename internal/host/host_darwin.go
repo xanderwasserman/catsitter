@@ -11,13 +11,16 @@ func (macGate) Prompt()       { mac.Prompt() }
 
 // Open wires CoreGraphics, IOKit, and the Accessibility check.
 func Open() Backends {
+	front := &mac.Front{}
 	return Backends{
-		Idle:    idleFunc(mac.IdleTime),
-		Nudge:   mac.Nudger{},
-		Inhibit: mac.Inhibitor{},
-		Gate:    macGate{},
-		Close:   func() {},
-		Pump:    mac.Drain,
-		Overlay: mac.ExcludeFromSwitcher,
+		Idle:         idleFunc(mac.IdleTime),
+		Nudge:        mac.Nudger{},
+		Inhibit:      mac.Inhibitor{},
+		Gate:         macGate{},
+		Close:        func() {},
+		Pump:         mac.Drain,
+		Overlay:      mac.ExcludeFromSwitcher,
+		NoteFocus:    front.Note,
+		RestoreFocus: front.Restore,
 	}
 }

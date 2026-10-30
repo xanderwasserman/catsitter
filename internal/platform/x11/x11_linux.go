@@ -32,22 +32,25 @@ type Client struct {
 	ss   bool
 	keys map[uint32]xproto.Keycode
 
-	mu       sync.Mutex
-	xmu      sync.Mutex
-	atoms    map[string]xproto.Atom
-	petWin   xproto.Window
-	menuWin  xproto.Window
-	menuPtr  bool
-	menuKey  bool
-	menuArm  bool
-	menuBtns uint16
-	menuEsc  bool
-	escCode  xproto.Keycode
-	escKnown bool
-	lastX    int16
-	lastY    int16
-	havePos  bool
-	lastMove time.Time
+	mu         sync.Mutex
+	xmu        sync.Mutex
+	atoms      map[string]xproto.Atom
+	petWin     xproto.Window
+	menuWin    xproto.Window
+	menuPtr    bool
+	menuKey    bool
+	menuArm    bool
+	menuBtns   uint16
+	menuEsc    bool
+	escCode    xproto.Keycode
+	escKnown   bool
+	pressWin   xproto.Window
+	pressArmed bool
+	pressDown  bool
+	lastX      int16
+	lastY      int16
+	havePos    bool
+	lastMove   time.Time
 }
 
 // Open connects to the server in DISPLAY.

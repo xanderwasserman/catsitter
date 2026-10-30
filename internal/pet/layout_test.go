@@ -46,3 +46,18 @@ func TestDragTracksThePointer(t *testing.T) {
 		t.Fatalf("%d,%d", x, y)
 	}
 }
+
+func TestDragAnchorUsesThePress(t *testing.T) {
+	x, y, abs := dragAnchor(10, 20, true, true, 40, 50, 1, 2)
+	if x != 10 || y != 20 || !abs {
+		t.Fatalf("press %d,%d abs=%v", x, y, abs)
+	}
+	x, y, abs = dragAnchor(0, 0, false, true, 40, 50, 1, 2)
+	if x != 40 || y != 50 || !abs {
+		t.Fatalf("sample %d,%d abs=%v", x, y, abs)
+	}
+	x, y, abs = dragAnchor(0, 0, false, false, 0, 0, 1, 2)
+	if x != 1 || y != 2 || abs {
+		t.Fatalf("cursor %d,%d abs=%v", x, y, abs)
+	}
+}

@@ -89,3 +89,17 @@ func clampInto(pos, length, space int) int {
 func draggedOrigin(originX, originY, pressX, pressY, nowX, nowY int) (int, int) {
 	return originX + nowX - pressX, originY + nowY - pressY
 }
+
+// dragAnchor is the pointer position a drag measures from.
+// A button-press event wins over a later sample, so a move in the same
+// instant as the press still counts. abs is false when the only position
+// is the window-local cursor.
+func dragAnchor(pressX, pressY int, pressed, sampled bool, sampleX, sampleY, cursorX, cursorY int) (x, y int, abs bool) {
+	if pressed {
+		return pressX, pressY, true
+	}
+	if sampled {
+		return sampleX, sampleY, true
+	}
+	return cursorX, cursorY, false
+}

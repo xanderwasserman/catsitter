@@ -32,6 +32,14 @@ type Desktop struct {
 	// Pointer returns the pointer in window-position units.
 	// deviceScale is the monitor scale. ok is false when it is unavailable.
 	Pointer func(deviceScale float64) (x, y int, ok bool)
+	// Press reports a button-press position and whether that button is held.
+	// Nil where the window's own click is the press position.
+	Press func(deviceScale float64) (x, y int, pressed, down bool)
+	// NoteFocus records the app that should receive keys after the menu.
+	// RestoreFocus hands them back when this process still holds the keyboard.
+	// Both are nil where the menu does not take focus.
+	NoteFocus    func()
+	RestoreFocus func()
 }
 
 // Run shows the pet until the controller asks to quit.
@@ -52,16 +60,19 @@ func Run(p Pet, ctrl control.Controller, bar *tray.Handle, desk Desktop) error {
 		X11InstanceName:   "catsitter",
 	}
 	return ebiten.RunGameWithOptions(&game{
-		pet:      p,
-		ctrl:     ctrl,
-		tray:     bar,
-		catW:     catW,
-		catH:     catH,
-		pixel:    ebiten.NewImage(1, 1),
-		pump:     desk.Pump,
-		overlay:  desk.Overlay,
-		menuGrab: desk.MenuGrab,
-		pointAt:  desk.Pointer,
+		pet:          p,
+		ctrl:         ctrl,
+		tray:         bar,
+		catW:         catW,
+		catH:         catH,
+		pixel:        ebiten.NewImage(1, 1),
+		pump:         desk.Pump,
+		overlay:      desk.Overlay,
+		menuGrab:     desk.MenuGrab,
+		pointAt:      desk.Pointer,
+		buttonAt:     desk.Press,
+		noteFocus:    desk.NoteFocus,
+		restoreFocus: desk.RestoreFocus,
 	}, op)
 }
 
@@ -72,11 +83,14 @@ type game struct {
 	catW int
 	catH int
 
-	pixel    *ebiten.Image
-	pump     func()
-	overlay  func() error
-	menuGrab func(open bool) bool
-	pointAt  func(deviceScale float64) (x, y int, ok bool)
+	pixel        *ebiten.Image
+	pump         func()
+	overlay      func() error
+	menuGrab     func(open bool) bool
+	pointAt      func(deviceScale float64) (x, y int, ok bool)
+	buttonAt     func(deviceScale float64) (x, y int, pressed, down bool)
+	noteFocus    func()
+	restoreFocus func()
 
 	overlayDone    bool
 	overlayWarned  bool
@@ -110,6 +124,9 @@ func (g *game) screenSize() (int, int) {
 }
 
 func (g *game) Update() error {
+	if g.noteFocus != nil {
+		g.noteFocus()
+	}
 	if g.pump != nil {
 		g.pump()
 	}
@@ -131,9 +148,13 @@ func (g *game) Update() error {
 		}
 		g.placed = true
 	}
+	wasMenu := g.menu
 	g.syncHidden(view)
 	if g.hidden {
 		g.syncMenuGrab()
+		if wasMenu {
+			g.handBack()
+		}
 		ebiten.SetTPS(2)
 		return nil
 	}
@@ -229,9 +250,18 @@ func (g *game) pointer(view control.View) {
 	if activate {
 		g.activate(cy-g.lay.Menu.Y, view)
 	}
+	closing := g.menu && !open
 	g.menu = open
 	g.menuSawFocus = saw
 	g.syncMenuGrab()
+	if closing {
+		g.handBack()
+	}
+	px, py, pressed, held := g.readPress()
+	if g.menu || closing {
+		pressed = false
+		held = false
+	}
 	if consumed {
 		g.dragging = false
 		return
@@ -239,30 +269,43 @@ func (g *game) pointer(view control.View) {
 	if !g.haveCat {
 		return
 	}
-	if !ebiten.IsMouseButtonPressed(ebiten.MouseButtonLeft) {
+	just := inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonLeft)
+	if !g.dragging && (pressed || just) {
+		sx, sy, sampled := g.samplePointer()
+		ax, ay, abs := dragAnchor(px, py, pressed, sampled, sx, sy, cx, cy)
+		g.dragging = true
+		g.dragged = false
+		g.dragAbs = abs
+		g.dragCatX, g.dragCatY = g.catX, g.catY
+		g.dragPtrX, g.dragPtrY = ax, ay
+	}
+	down := ebiten.IsMouseButtonPressed(ebiten.MouseButtonLeft) || held
+	if g.dragging {
+		g.moveDrag(cx, cy)
+	}
+	if !down {
 		if g.dragging && g.dragged {
 			g.ctrl.SaveWindow(g.catX, g.catY)
 		}
 		g.dragging = false
 		g.dragged = false
-		return
 	}
-	if inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonLeft) {
-		g.dragging = true
-		g.dragged = false
-		g.dragCatX, g.dragCatY = g.catX, g.catY
-		if x, y, ok := g.samplePointer(); ok {
-			g.dragAbs = true
-			g.dragPtrX, g.dragPtrY = x, y
-		} else {
-			g.dragAbs = false
-			g.dragPtrX, g.dragPtrY = cx, cy
-		}
-		return
+}
+
+func (g *game) handBack() {
+	if g.restoreFocus != nil {
+		g.restoreFocus()
 	}
-	if !g.dragging {
-		return
+}
+
+func (g *game) readPress() (x, y int, pressed, down bool) {
+	if g.buttonAt == nil {
+		return 0, 0, false, false
 	}
+	return g.buttonAt(g.deviceScale())
+}
+
+func (g *game) moveDrag(cx, cy int) {
 	var nx, ny int
 	if g.dragAbs {
 		x, y, ok := g.samplePointer()
@@ -282,15 +325,18 @@ func (g *game) pointer(view control.View) {
 	g.catX, g.catY = nx, ny
 }
 
+func (g *game) deviceScale() float64 {
+	if mon := ebiten.Monitor(); mon != nil && mon.DeviceScaleFactor() > 0 {
+		return mon.DeviceScaleFactor()
+	}
+	return 1
+}
+
 func (g *game) samplePointer() (int, int, bool) {
 	if g.pointAt == nil {
 		return 0, 0, false
 	}
-	scale := 1.0
-	if mon := ebiten.Monitor(); mon != nil && mon.DeviceScaleFactor() > 0 {
-		scale = mon.DeviceScaleFactor()
-	}
-	return g.pointAt(scale)
+	return g.pointAt(g.deviceScale())
 }
 
 func (g *game) syncMenuGrab() {

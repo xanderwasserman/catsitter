@@ -28,6 +28,14 @@ type Backends struct {
 	// Pointer returns the pointer in window-position units.
 	// deviceScale is the monitor scale. ok is false when it is unavailable.
 	Pointer func(deviceScale float64) (x, y int, ok bool)
+	// Press reports a button-press position and whether the button is held.
+	// Nil where the window's own click is the press position.
+	Press func(deviceScale float64) (x, y int, pressed, down bool)
+	// NoteFocus records the app that should receive keys after the menu.
+	// RestoreFocus hands them back when this process still holds the keyboard.
+	// Both are nil where the menu does not take focus.
+	NoteFocus    func()
+	RestoreFocus func()
 }
 
 type idleFunc func() (time.Duration, error)

@@ -48,10 +48,13 @@ func main() {
 	session.Start()
 	defer session.Shutdown()
 	if err := pet.Run(cat.New(), session, tray.New(session), pet.Desktop{
-		Pump:     backends.Pump,
-		Overlay:  backends.Overlay,
-		MenuGrab: backends.MenuGrab,
-		Pointer:  backends.Pointer,
+		Pump:         backends.Pump,
+		Overlay:      backends.Overlay,
+		MenuGrab:     backends.MenuGrab,
+		Pointer:      backends.Pointer,
+		Press:        backends.Press,
+		NoteFocus:    backends.NoteFocus,
+		RestoreFocus: backends.RestoreFocus,
 	}); err != nil {
 		log.Fatal(err)
 	}

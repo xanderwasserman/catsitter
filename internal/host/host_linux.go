@@ -31,5 +31,8 @@ func Open() Backends {
 	b.Overlay = func() error { return client.ExcludeFromSwitcher(platform.OverlayTitle) }
 	b.MenuGrab = func(open bool) bool { return client.MenuGrab(platform.OverlayTitle, open) }
 	b.Pointer = client.Pointer
+	b.Press = func(scale float64) (int, int, bool, bool) {
+		return client.Press(platform.OverlayTitle, scale)
+	}
 	return b
 }

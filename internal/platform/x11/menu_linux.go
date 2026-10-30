@@ -24,7 +24,8 @@ func (c *Client) Pointer(deviceScale float64) (int, int, bool) {
 // MenuGrab takes the pointer and the keyboard while the menu is open.
 // A notification window is not focused by a right-click, so Escape and a
 // click on the desktop never reach it unless this process grabs them.
-// Inside clicks are forwarded to the window. open false releases the grab.
+// The grab does not move keyboard focus. Inside clicks are forwarded to
+// the window. open false releases the grab.
 func (c *Client) MenuGrab(title string, open bool) bool {
 	c.xmu.Lock()
 	defer c.xmu.Unlock()
@@ -39,7 +40,6 @@ func (c *Client) MenuGrab(title string, open bool) bool {
 	if !c.menuArm {
 		c.menuArm = true
 		c.menuWin = win
-		c.focusWindow(win)
 		c.menuBtns = c.buttons()
 		c.menuEsc = c.escapeDown()
 		c.rememberEscape()
@@ -153,22 +153,90 @@ func (c *Client) forward(win xproto.Window, raw []byte) {
 	if win == 0 || len(raw) == 0 {
 		return
 	}
-	mask := uint32(xproto.EventMaskButtonPress | xproto.EventMaskButtonRelease)
+	mask := uint32(xproto.EventMaskButtonPress | xproto.EventMaskButtonRelease | xproto.EventMaskPointerMotion)
 	_ = xproto.SendEventChecked(c.conn, false, win, mask, string(raw)).Check()
 }
 
-func (c *Client) focusWindow(win xproto.Window) {
-	if atom, err := c.atom("_NET_ACTIVE_WINDOW"); err == nil {
-		ev := xproto.ClientMessageEvent{
-			Format: 32,
-			Window: win,
-			Type:   atom,
-			Data:   xproto.ClientMessageDataUnionData32New([]uint32{1, 0, 0, 0, 0}),
-		}
-		mask := uint32(xproto.EventMaskSubstructureRedirect | xproto.EventMaskSubstructureNotify)
-		_ = xproto.SendEventChecked(c.conn, false, c.root, mask, string(ev.Bytes())).Check()
+// Press reports button 1 in window-position units.
+// pressed is a button-press event since the last call, at that event's pointer.
+// down is true while the button is held. Both are false when the watch is unavailable.
+func (c *Client) Press(title string, deviceScale float64) (x, y int, pressed, down bool) {
+	c.xmu.Lock()
+	defer c.xmu.Unlock()
+	win, ok := c.petWindow(title)
+	if !ok {
+		return 0, 0, false, false
 	}
-	_ = xproto.SetInputFocusChecked(c.conn, xproto.InputFocusParent, win, xproto.TimeCurrentTime).Check()
+	c.armPress(win)
+	rx, ry, saw := c.drainPress()
+	if !saw {
+		return 0, 0, false, c.pressDown
+	}
+	return platform.DIP(int(rx), deviceScale), platform.DIP(int(ry), deviceScale), true, c.pressDown
+}
+
+func (c *Client) armPress(win xproto.Window) {
+	if c.pressArmed && c.pressWin == win {
+		return
+	}
+	if c.pressArmed && c.pressWin != 0 {
+		_ = xproto.UngrabButtonChecked(c.conn, xproto.ButtonIndex1, c.pressWin, xproto.ModMaskAny).Check()
+		c.pressArmed = false
+	}
+	c.pressWin = win
+	mask := uint16(xproto.EventMaskButtonPress | xproto.EventMaskButtonRelease | xproto.EventMaskPointerMotion)
+	err := xproto.GrabButtonChecked(
+		c.conn,
+		false,
+		win,
+		mask,
+		xproto.GrabModeAsync,
+		xproto.GrabModeAsync,
+		0,
+		0,
+		xproto.ButtonIndex1,
+		xproto.ModMaskAny,
+	).Check()
+	if err != nil {
+		return
+	}
+	c.pressArmed = true
+}
+
+func (c *Client) drainPress() (x, y int16, saw bool) {
+	if !c.pressArmed {
+		return 0, 0, false
+	}
+	n := 0
+	for range 32 {
+		ev, err := c.conn.PollForEvent()
+		if ev == nil || err != nil {
+			break
+		}
+		n++
+		switch e := ev.(type) {
+		case xproto.ButtonPressEvent:
+			if e.Detail == 1 && !saw {
+				x, y, saw = e.RootX, e.RootY, true
+				c.pressDown = true
+			}
+			c.forward(c.pressWin, e.Bytes())
+		case xproto.ButtonReleaseEvent:
+			if e.Detail == 1 {
+				c.pressDown = false
+			}
+			c.forward(c.pressWin, e.Bytes())
+		case xproto.MotionNotifyEvent:
+			c.forward(c.pressWin, e.Bytes())
+		}
+	}
+	if c.pressDown && c.buttons()&xproto.ButtonMask1 == 0 {
+		c.pressDown = false
+	}
+	if n > 0 {
+		_, _ = xproto.GetInputFocus(c.conn).Reply()
+	}
+	return x, y, saw
 }
 
 func (c *Client) covers(win xproto.Window, rootX, rootY int16) bool {
