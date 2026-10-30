@@ -32,8 +32,8 @@ type Desktop struct {
 	// Pointer returns the pointer in window-position units.
 	// deviceScale is the monitor scale. ok is false when it is unavailable.
 	Pointer func(deviceScale float64) (x, y int, ok bool)
-	// Press reports a button-press position and whether that button is held.
-	// Nil where the window's own click is the press position.
+	// Press reports where the pointer sat inside the window at the button press,
+	// and whether the button is held. Nil where the window's own cursor is that position.
 	Press func(deviceScale float64) (x, y int, pressed, down bool)
 	// NoteFocus records the app that should receive keys after the menu.
 	// RestoreFocus hands them back when this process still holds the keyboard.
@@ -92,24 +92,21 @@ type game struct {
 	noteFocus    func()
 	restoreFocus func()
 
-	overlayDone    bool
-	overlayWarned  bool
-	overlayTries   int
-	menuSawFocus   bool
-	placed         bool
-	menu           bool
-	hidden         bool
-	haveCat        bool
-	catX, catY     int
-	savedX, savedY int
-	lay            placement
-	dragging       bool
-	dragged        bool
-	dragAbs        bool
-	dragCatX       int
-	dragCatY       int
-	dragPtrX       int
-	dragPtrY       int
+	overlayDone        bool
+	overlayWarned      bool
+	overlayTries       int
+	menuSawFocus       bool
+	placed             bool
+	menu               bool
+	hidden             bool
+	haveCat            bool
+	catX, catY         int
+	savedX, savedY     int
+	lay                placement
+	dragging           bool
+	dragged            bool
+	dragAbs            bool
+	dragOffX, dragOffY int
 }
 
 func (g *game) Layout(outsideWidth, outsideHeight int) (int, int) {
@@ -271,13 +268,16 @@ func (g *game) pointer(view control.View) {
 	}
 	just := inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonLeft)
 	if !g.dragging && (pressed || just) {
-		sx, sy, sampled := g.samplePointer()
-		ax, ay, abs := dragAnchor(px, py, pressed, sampled, sx, sy, cx, cy)
 		g.dragging = true
 		g.dragged = false
-		g.dragAbs = abs
-		g.dragCatX, g.dragCatY = g.catX, g.catY
-		g.dragPtrX, g.dragPtrY = ax, ay
+		// The press position inside the window. The X event is that position;
+		// otherwise the cursor in this window is.
+		if pressed {
+			g.dragOffX, g.dragOffY = px, py
+		} else {
+			g.dragOffX, g.dragOffY = cx, cy
+		}
+		g.dragAbs = g.pointAt != nil
 	}
 	down := ebiten.IsMouseButtonPressed(ebiten.MouseButtonLeft) || held
 	if g.dragging {
@@ -312,12 +312,10 @@ func (g *game) moveDrag(cx, cy int) {
 		if !ok {
 			return
 		}
-		nx, ny = draggedOrigin(g.dragCatX, g.dragCatY, g.dragPtrX, g.dragPtrY, x, y)
+		nx, ny = grabbedWindow(x, y, g.dragOffX, g.dragOffY)
 	} else {
-		// The cursor is window-local. The press-time offset stays under it.
 		wx, wy := ebiten.WindowPosition()
-		nx = wx + cx - g.dragPtrX
-		ny = wy + cy - g.dragPtrY
+		nx, ny = grabbedWindowFromCursor(wx, wy, cx, cy, g.dragOffX, g.dragOffY)
 	}
 	if nx != g.catX || ny != g.catY {
 		g.dragged = true

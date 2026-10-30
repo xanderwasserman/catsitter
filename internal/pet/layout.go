@@ -84,22 +84,16 @@ func clampInto(pos, length, space int) int {
 	return pos
 }
 
-// draggedOrigin is the window position after the pointer moves from
-// press to now. All four values are in the same units.
-func draggedOrigin(originX, originY, pressX, pressY, nowX, nowY int) (int, int) {
-	return originX + nowX - pressX, originY + nowY - pressY
+// grabbedWindow is the window origin that keeps a grab point under the pointer.
+// pointer is the absolute pointer in window-position units.
+// offset is the pointer's position inside the window at the press.
+// The window position at the press is not an input, so a late or stale read of it cannot shift the grab.
+func grabbedWindow(pointerX, pointerY, offsetX, offsetY int) (int, int) {
+	return pointerX - offsetX, pointerY - offsetY
 }
 
-// dragAnchor is the pointer position a drag measures from.
-// A button-press event wins over a later sample, so a move in the same
-// instant as the press still counts. abs is false when the only position
-// is the window-local cursor.
-func dragAnchor(pressX, pressY int, pressed, sampled bool, sampleX, sampleY, cursorX, cursorY int) (x, y int, abs bool) {
-	if pressed {
-		return pressX, pressY, true
-	}
-	if sampled {
-		return sampleX, sampleY, true
-	}
-	return cursorX, cursorY, false
+// grabbedWindowFromCursor is grabbedWindow when the pointer is known only as
+// a cursor inside the current window. cursor is that pointer minus the window origin.
+func grabbedWindowFromCursor(windowX, windowY, cursorX, cursorY, offsetX, offsetY int) (int, int) {
+	return grabbedWindow(windowX+cursorX, windowY+cursorY, offsetX, offsetY)
 }

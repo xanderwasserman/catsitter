@@ -157,9 +157,11 @@ func (c *Client) forward(win xproto.Window, raw []byte) {
 	_ = xproto.SendEventChecked(c.conn, false, win, mask, string(raw)).Check()
 }
 
-// Press reports button 1 in window-position units.
-// pressed is a button-press event since the last call, at that event's pointer.
-// down is true while the button is held. Both are false when the watch is unavailable.
+// Press reports button 1.
+// x and y are the pointer's position inside the window at the press, in
+// window-position units, from that press event. pressed is true when a press
+// arrived since the last call. down is true while the button is held.
+// Both are false when the watch is unavailable.
 func (c *Client) Press(title string, deviceScale float64) (x, y int, pressed, down bool) {
 	c.xmu.Lock()
 	defer c.xmu.Unlock()
@@ -217,7 +219,7 @@ func (c *Client) drainPress() (x, y int16, saw bool) {
 		switch e := ev.(type) {
 		case xproto.ButtonPressEvent:
 			if e.Detail == 1 && !saw {
-				x, y, saw = e.RootX, e.RootY, true
+				x, y, saw = e.EventX, e.EventY, true
 				c.pressDown = true
 			}
 			c.forward(c.pressWin, e.Bytes())

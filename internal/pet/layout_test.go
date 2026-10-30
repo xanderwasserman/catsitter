@@ -40,24 +40,36 @@ func TestMenuOpensRightWhenThereIsRoom(t *testing.T) {
 	}
 }
 
-func TestDragTracksThePointer(t *testing.T) {
-	x, y := draggedOrigin(1744, 964, 1000, 500, 200, 0)
-	if x != 944 || y != 464 {
-		t.Fatalf("%d,%d", x, y)
+func TestGrabbedWindowKeepsTheGrabPoint(t *testing.T) {
+	// The pointer moved 22,-18 in the instant after the press, before the drag ran.
+	const (
+		winX    = 1744
+		winY    = 964
+		offsetX = 40
+		offsetY = 30
+		moveX   = 22
+		moveY   = -18
+	)
+	pointerX := winX + offsetX + moveX
+	pointerY := winY + offsetY + moveY
+	gotX, gotY := grabbedWindow(pointerX, pointerY, offsetX, offsetY)
+	if gotX != winX+moveX || gotY != winY+moveY {
+		t.Fatalf("window %d,%d", gotX, gotY)
+	}
+	if gotX+offsetX != pointerX || gotY+offsetY != pointerY {
+		t.Fatalf("grab point %d,%d left pointer %d,%d", gotX+offsetX, gotY+offsetY, pointerX, pointerY)
 	}
 }
 
-func TestDragAnchorUsesThePress(t *testing.T) {
-	x, y, abs := dragAnchor(10, 20, true, true, 40, 50, 1, 2)
-	if x != 10 || y != 20 || !abs {
-		t.Fatalf("press %d,%d abs=%v", x, y, abs)
-	}
-	x, y, abs = dragAnchor(0, 0, false, true, 40, 50, 1, 2)
-	if x != 40 || y != 50 || !abs {
-		t.Fatalf("sample %d,%d abs=%v", x, y, abs)
-	}
-	x, y, abs = dragAnchor(0, 0, false, false, 0, 0, 1, 2)
-	if x != 1 || y != 2 || abs {
-		t.Fatalf("cursor %d,%d abs=%v", x, y, abs)
+func TestCursorDragMatchesTheAbsoluteGrab(t *testing.T) {
+	const (
+		winX, winY = 1744, 964
+		curX, curY = 55, 28
+		offX, offY = 40, 30
+	)
+	ax, ay := grabbedWindow(winX+curX, winY+curY, offX, offY)
+	bx, by := grabbedWindowFromCursor(winX, winY, curX, curY, offX, offY)
+	if ax != bx || ay != by {
+		t.Fatalf("absolute %d,%d cursor %d,%d", ax, ay, bx, by)
 	}
 }
