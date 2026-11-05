@@ -94,6 +94,11 @@ stop_running() {
 }
 
 start_app() {
+	# Through Launch Services, macOS checks Accessibility for Catsitter itself
+	# rather than for this terminal.
+	if [ "$goos" = "darwin" ] && open "$HOME/Applications/Catsitter.app" >/dev/null 2>&1; then
+		return 0
+	fi
 	# A subshell so the pet survives this script exiting.
 	(
 		nohup "$install_bin" >/dev/null 2>&1 &
@@ -110,9 +115,18 @@ warn_path() {
 	echo 'export PATH="$HOME/.local/bin:$PATH"' >&2
 }
 
+# A new binary does not match the old Accessibility entry, which would look
+# on and not work. Clearing it lets the next launch add a fresh one.
+forget_permission() {
+	if command -v tccutil >/dev/null 2>&1; then
+		tccutil reset Accessibility com.xanderwasserman.catsitter >/dev/null 2>&1 || true
+	fi
+}
+
 remove_install() {
 	if [ "$goos" = "darwin" ]; then
 		rm -rf "$HOME/Applications/Catsitter.app"
+		forget_permission
 	else
 		rm -f "$install_bin"
 		rm -f "$HOME/.local/share/applications/catsitter.desktop"
@@ -204,7 +218,11 @@ fi
 
 if [ "$goos" = "darwin" ]; then
 	app="$HOME/Applications/Catsitter.app"
+	if [ -d "$app" ]; then
+		echo "macOS ties Accessibility to each build of this unsigned app, so allow Catsitter again in Privacy & Security > Accessibility."
+	fi
 	rm -rf "$app"
+	forget_permission
 	mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
 	cp "$tmp/extract/catsitter" "$install_bin"
 	chmod 755 "$install_bin"
@@ -215,6 +233,8 @@ if [ "$goos" = "darwin" ]; then
 <dict>
 	<key>CFBundleExecutable</key>
 	<string>catsitter</string>
+	<key>CFBundleIconFile</key>
+	<string>icon</string>
 	<key>CFBundleIdentifier</key>
 	<string>com.xanderwasserman.catsitter</string>
 	<key>CFBundleName</key>
@@ -236,10 +256,14 @@ if [ "$goos" = "darwin" ]; then
 </dict>
 </plist>
 EOF
-	if [ -f "$tmp/extract/icon.png" ]; then
-		cp "$tmp/extract/icon.png" "$app/Contents/Resources/icon.png"
-	elif [ -f "$tmp/extract/packaging/icon.png" ]; then
-		cp "$tmp/extract/packaging/icon.png" "$app/Contents/Resources/icon.png"
+	if [ -f "$tmp/extract/icon.icns" ]; then
+		cp "$tmp/extract/icon.icns" "$app/Contents/Resources/icon.icns"
+	fi
+	# Re-register the bundle so Finder, Spotlight and Launchpad show the new icon.
+	touch "$app"
+	lsregister=/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister
+	if [ -x "$lsregister" ]; then
+		"$lsregister" -f "$app" >/dev/null 2>&1 || true
 	fi
 	if command -v xattr >/dev/null 2>&1; then
 		xattr -dr com.apple.quarantine "$app" 2>/dev/null || true

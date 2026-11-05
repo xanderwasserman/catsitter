@@ -40,6 +40,9 @@ type Desktop struct {
 	// Both are nil where the menu does not take focus.
 	NoteFocus    func()
 	RestoreFocus func()
+	// SingleThread runs Update and Draw on the main thread, so the hooks
+	// and the tray start there too.
+	SingleThread bool
 }
 
 // Run shows the pet until the controller asks to quit.
@@ -56,6 +59,7 @@ func Run(p Pet, ctrl control.Controller, bar *tray.Handle, desk Desktop) error {
 	op := &ebiten.RunGameOptions{
 		ScreenTransparent: true,
 		SkipTaskbar:       true,
+		SingleThread:      desk.SingleThread,
 		X11ClassName:      platform.OverlayTitle,
 		X11InstanceName:   "catsitter",
 	}
@@ -124,10 +128,10 @@ func (g *game) Update() error {
 	if g.noteFocus != nil {
 		g.noteFocus()
 	}
+	g.keepOutOfSwitcher()
 	if g.pump != nil {
 		g.pump()
 	}
-	g.keepOutOfSwitcher()
 	// CloseMainWindow and the window's close button both arrive here.
 	// Quit first so Shutdown can save the config before the process ends.
 	if ebiten.IsWindowBeingClosed() {
@@ -375,6 +379,8 @@ func (g *game) activate(cy int, view control.View) {
 		return
 	}
 	switch rows[idx].id {
+	case "access":
+		g.ctrl.RequestAccess()
 	case "pause":
 		g.ctrl.TogglePause()
 	case "inhibit":
@@ -482,5 +488,9 @@ func menuRows(view control.View) []menuRow {
 	if view.Trusted {
 		return rows
 	}
-	return append([]menuRow{{id: "access", label: "Accessibility is off"}}, rows...)
+	access := []menuRow{
+		{id: "paused", label: "Nudges paused (no access)"},
+		{id: "access", label: "Allow Accessibility..."},
+	}
+	return append(access, rows...)
 }

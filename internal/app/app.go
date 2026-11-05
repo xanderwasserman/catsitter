@@ -33,6 +33,8 @@ type App struct {
 	trusted   atomic.Bool
 	lastNudge atomic.Int64
 	prompted  atomic.Bool
+	// settled is set once the permission has been seen. No prompt follows it.
+	settled atomic.Bool
 }
 
 // New prepares a session. live is what this run uses, including one-off
@@ -110,15 +112,30 @@ func (a *App) watchPermission(ctx context.Context) {
 }
 
 func (a *App) applyTrust(ok bool) {
-	a.trusted.Store(ok)
+	was := a.trusted.Swap(ok)
 	a.mu.Lock()
 	want := a.cfg.Mouse || a.cfg.Shift || a.cfg.Switch
 	a.pushLocked()
 	a.mu.Unlock()
-	if ok || !want || a.prompted.Swap(true) {
+	if ok {
+		if !a.settled.Swap(true) && !was {
+			log.Printf("accessibility permission granted; nudges are on")
+			a.gate.Granted()
+		}
+		return
+	}
+	if !want || a.settled.Load() || a.prompted.Swap(true) {
 		return
 	}
 	log.Printf("accessibility permission is missing; nudges wait, the sleep inhibitor still runs")
+	a.gate.Prompt()
+}
+
+// RequestAccess shows the permission explanation again while it is missing.
+func (a *App) RequestAccess() {
+	if a.gate == nil || a.trusted.Load() {
+		return
+	}
 	a.gate.Prompt()
 }
 

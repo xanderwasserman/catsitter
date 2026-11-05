@@ -1,6 +1,10 @@
 package pet
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/xanderwasserman/catsitter/internal/control"
+)
 
 func TestMenuClosesOnSelectionEscapeAndOutside(t *testing.T) {
 	open, saw, activate, consumed := nextMenu(false, menuEvent{Right: true, Focused: true})
@@ -43,5 +47,26 @@ func TestMenuClosedLeftClickIsNotConsumed(t *testing.T) {
 	_, _, _, consumed := nextMenu(false, menuEvent{Left: true})
 	if consumed {
 		t.Fatal("a click with the menu closed should still drag")
+	}
+}
+
+func TestMissingAccessLeadsTheMenu(t *testing.T) {
+	rows := menuRows(control.View{})
+	if rows[0].id != "paused" || rows[1].id != "access" {
+		t.Fatalf("first rows %+v", rows[:2])
+	}
+	for _, row := range menuRows(control.View{Trusted: true}) {
+		if row.id == "paused" || row.id == "access" {
+			t.Fatalf("access row while trusted: %+v", row)
+		}
+	}
+}
+
+func TestMenuLabelsFitTheMenu(t *testing.T) {
+	const textX, advance = 12, 7
+	for _, row := range menuRows(control.View{}) {
+		if w := textX + len(row.label)*advance; w > menuW {
+			t.Fatalf("%q is %d px wide, menu is %d", row.label, w, menuW)
+		}
 	}
 }

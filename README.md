@@ -63,7 +63,9 @@ Settings live in the OS config directory under `catsitter/config.json`.
 
 ## Permissions
 
-macOS nudges need Accessibility permission. Catsitter explains that and opens the Accessibility pane. Until you allow it, the cat still keeps the display awake and skips the jiggle and the key tap. The download is unsigned. If Gatekeeper stops it, right-click Catsitter, choose Open, then Open Anyway (or allow it under Privacy & Security). The installer clears the quarantine bit.
+macOS nudges need Accessibility permission. On the first start Catsitter explains why and offers Open Settings, which goes to Privacy & Security → Accessibility. Turn Catsitter on there. Until then the cat keeps the display awake and skips the jiggle and the key tap, and both the cat menu and the menu bar show that nudges are paused, with a shortcut back to the settings. Catsitter notices the change on its own and says thanks.
+
+Start Catsitter from Finder, Launchpad, or the installer. macOS gives the permission to whatever started the app, so running the binary from a terminal asks for the terminal instead. Updating clears the old entry, so allow the new version again. The download is unsigned. If Gatekeeper stops it, right-click Catsitter, choose Open, then Open Anyway (or allow it under Privacy & Security). The installer clears the quarantine bit.
 
 Windows SmartScreen may say the app is unrecognized. Choose More info, then Run anyway.
 
@@ -87,5 +89,7 @@ macOS builds need CGO for IOKit, CoreGraphics, and the menu bar. Linux and Windo
 ```sh
 CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -o catsitter.exe ./cmd/catsitter
 ```
+
+The macOS app icon is built from `packaging/icon.png`. Run `go run ./packaging/icns packaging/icon.png packaging/icon.icns` after changing it.
 
 GoReleaser builds the six release archives and `checksums.txt`. Tag `v0.1.0` (or any `v*`) to publish them, with `install.sh` and `install.ps1` attached to the release.

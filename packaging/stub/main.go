@@ -12,12 +12,20 @@ import (
 // version is overwritten with -X main.version.
 var version = "dev"
 
+// marker is the pid file path, set with -X main.marker. CATSITTER_STUB_MARKER
+// overrides it. The link-time value reaches apps that macOS starts.
+var marker = ""
+
 func main() {
 	if len(os.Args) > 1 && os.Args[1] == "--version" {
 		fmt.Println(version)
 		return
 	}
-	if path := os.Getenv("CATSITTER_STUB_MARKER"); path != "" {
+	path := marker
+	if env := os.Getenv("CATSITTER_STUB_MARKER"); env != "" {
+		path = env
+	}
+	if path != "" {
 		_ = os.WriteFile(path, []byte(strconv.Itoa(os.Getpid())+"\n"), 0o644)
 	}
 	for {

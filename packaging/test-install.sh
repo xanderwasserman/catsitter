@@ -65,7 +65,7 @@ trap cleanup EXIT INT TERM
 build_stub() {
 	ver=$1
 	out=$2
-	go build -ldflags "-X main.version=$ver" -o "$out" "$root/packaging/stub"
+	go build -ldflags "-X main.version=$ver -X main.marker=$marker" -o "$out" "$root/packaging/stub"
 }
 
 publish() {
@@ -76,7 +76,11 @@ publish() {
 	rm -rf "$dir" "$stage"
 	mkdir -p "$dir" "$stage"
 	cp "$bin" "$stage/catsitter"
-	cp "$root/packaging/icon.png" "$stage/icon.png"
+	if [ "$goos" = "darwin" ]; then
+		cp "$root/packaging/icon.icns" "$stage/icon.icns"
+	else
+		cp "$root/packaging/icon.png" "$stage/icon.png"
+	fi
 	asset="catsitter_${ver}_${goos}_${goarch}.$ext"
 	if [ "$ext" = "zip" ]; then
 		python3 - "$stage" "$dir/$asset" <<'PY'
@@ -164,6 +168,9 @@ if [ "$goos" = "linux" ]; then
 else
 	[ -f "$home/Applications/Catsitter.app/Contents/Info.plist" ] || die "missing Info.plist"
 	grep -q "$got" "$home/Applications/Catsitter.app/Contents/Info.plist" || die "Info.plist version was not written"
+	cmp -s "$root/packaging/icon.icns" "$home/Applications/Catsitter.app/Contents/Resources/icon.icns" || die "missing app icon"
+	grep -q "<key>CFBundleIconFile</key>" "$home/Applications/Catsitter.app/Contents/Info.plist" || die "Info.plist has no icon entry"
+	plutil -lint "$home/Applications/Catsitter.app/Contents/Info.plist" >/dev/null || die "Info.plist is not valid"
 fi
 
 # Pinning an older version while latest has moved.

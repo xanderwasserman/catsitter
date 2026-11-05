@@ -30,5 +30,8 @@ type Nudger interface {
 // Trusted is always true on Linux and Windows.
 type Gate interface {
 	Trusted() bool
+	// Prompt explains the missing permission and offers its settings page.
 	Prompt()
+	// Granted confirms that the permission arrived while running.
+	Granted()
 }

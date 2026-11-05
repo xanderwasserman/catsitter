@@ -6,6 +6,7 @@ import (
 	"image"
 	"image/color"
 	"image/png"
+	"log"
 	"sync"
 	"time"
 
@@ -35,7 +36,17 @@ func (h *Handle) Start() {
 	if h == nil || h.start == nil {
 		return
 	}
-	h.once.Do(h.start)
+	h.once.Do(func() {
+		defer survive("start")
+		h.start()
+	})
+}
+
+// survive keeps a Go panic in the tray from ending the app. The cat menu still works.
+func survive(step string) {
+	if r := recover(); r != nil {
+		log.Printf("tray %s failed: %v", step, r)
+	}
 }
 
 // Stop removes the icon.
@@ -48,11 +59,14 @@ func (h *Handle) Stop() {
 }
 
 func (h *Handle) ready() {
-	systray.SetIcon(iconPNG())
+	defer survive("setup")
+	systray.SetIcon(menuBarIcon())
 	systray.SetTooltip("Catsitter")
-	access := systray.AddMenuItem("Accessibility is off. Nudges are waiting.", "macOS Accessibility permission")
-	access.Disable()
-	access.Hide()
+	paused := systray.AddMenuItem("Nudges paused: Catsitter needs Accessibility", "macOS Accessibility permission")
+	paused.Disable()
+	paused.Hide()
+	allow := systray.AddMenuItem("Allow Accessibility…", "Open the macOS permission settings")
+	allow.Hide()
 	pause := systray.AddMenuItem("Pause", "Pause or resume")
 	systray.AddSeparator()
 	inhibit := systray.AddMenuItemCheckbox("Keep awake", "Sleep inhibitor", true)
@@ -80,6 +94,8 @@ func (h *Handle) ready() {
 		defer sync.Stop()
 		for {
 			select {
+			case <-allow.ClickedCh:
+				h.ctrl.RequestAccess()
 			case <-pause.ClickedCh:
 				h.ctrl.TogglePause()
 			case <-inhibit.ClickedCh:
@@ -101,11 +117,13 @@ func (h *Handle) ready() {
 					return
 				}
 				if view.Trusted {
-					access.Hide()
+					paused.Hide()
+					allow.Hide()
 					systray.SetTooltip("Catsitter")
 				} else {
-					access.Show()
-					systray.SetTooltip("Catsitter: Accessibility is off, so nudges wait")
+					paused.Show()
+					allow.Show()
+					systray.SetTooltip("Catsitter: nudges paused until you allow Accessibility")
 				}
 				if view.Paused {
 					pause.SetTitle("Resume")
@@ -158,9 +176,12 @@ func setCheck(item *systray.MenuItem, on bool) {
 	}
 }
 
-func iconPNG() []byte {
+// iconPNG draws the tray cat face on a 16-unit grid, scale pixels per unit.
+// rim adds a light edge around the dark outline and moves the face down
+// one unit to make room for it.
+func iconPNG(scale int, rim bool) []byte {
 	const n = 16
-	img := image.NewRGBA(image.Rect(0, 0, n, n))
+	grid := image.NewRGBA(image.Rect(0, 0, n, n))
 	// A tiny original cat face for the tray.
 	rows := []string{
 		"....KKKKKK....",
@@ -176,9 +197,6 @@ func iconPNG() []byte {
 		"KOODLLLLLLDOOK",
 		".KOOODDDDOOOK.",
 		"..KKK....KKK..",
-		"..............",
-		"..............",
-		"..............",
 	}
 	colors := map[byte]color.RGBA{
 		'K': {42, 32, 28, 255},
@@ -191,18 +209,56 @@ func iconPNG() []byte {
 		'L': {246, 196, 138, 255},
 		'D': {176, 88, 36, 255},
 	}
+	top := 0
+	if rim {
+		top = 1
+	}
 	for y, row := range rows {
-		pad := 0
-		if len(row) < n {
-			pad = (n - len(row)) / 2
-		}
-		for x := 0; x < len(row) && pad+x < n; x++ {
+		pad := (n - len(row)) / 2
+		for x := 0; x < len(row); x++ {
 			if c, ok := colors[row[x]]; ok {
-				img.SetRGBA(pad+x, y, c)
+				grid.SetRGBA(pad+x, top+y, c)
 			}
+		}
+	}
+	if rim {
+		addRim(grid, color.RGBA{128, 123, 117, 128})
+	}
+	img := image.NewRGBA(image.Rect(0, 0, n*scale, n*scale))
+	for y := 0; y < n*scale; y++ {
+		for x := 0; x < n*scale; x++ {
+			img.SetRGBA(x, y, grid.RGBAAt(x/scale, y/scale))
 		}
 	}
 	var buf bytes.Buffer
 	_ = png.Encode(&buf, img)
 	return buf.Bytes()
+}
+
+// addRim fills each empty cell that touches the art, including diagonally.
+func addRim(grid *image.RGBA, c color.RGBA) {
+	b := grid.Bounds()
+	var edge []image.Point
+	for y := b.Min.Y; y < b.Max.Y; y++ {
+		for x := b.Min.X; x < b.Max.X; x++ {
+			if grid.RGBAAt(x, y).A == 0 && touchesArt(grid, x, y) {
+				edge = append(edge, image.Pt(x, y))
+			}
+		}
+	}
+	for _, p := range edge {
+		grid.SetRGBA(p.X, p.Y, c)
+	}
+}
+
+func touchesArt(grid *image.RGBA, x, y int) bool {
+	for dy := -1; dy <= 1; dy++ {
+		for dx := -1; dx <= 1; dx++ {
+			p := image.Pt(x+dx, y+dy)
+			if p.In(grid.Bounds()) && grid.RGBAAt(p.X, p.Y).A == 255 {
+				return true
+			}
+		}
+	}
+	return false
 }
