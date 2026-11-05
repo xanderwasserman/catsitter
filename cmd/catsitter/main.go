@@ -79,11 +79,13 @@ func main() {
 func updateOptions(configPath string, auto bool) update.Options {
 	home, _ := os.UserHomeDir()
 	exe, _ := os.Executable()
+	feed := update.FeedFromEnv("catsitter/" + version.Version + " (+" + control.Project + ")")
 	return update.Options{
 		Version:    version.Version,
+		Repo:       feed.Repo,
 		GOOS:       runtime.GOOS,
 		GOARCH:     runtime.GOARCH,
-		Releases:   update.FeedFromEnv("catsitter/" + version.Version + " (+" + control.Project + ")"),
+		Releases:   feed,
 		Launcher:   installer(),
 		Store:      update.Store{Path: filepath.Join(filepath.Dir(configPath), "update.json")},
 		CanInstall: update.Installed(exe, userHome(home)),

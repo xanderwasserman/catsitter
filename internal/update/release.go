@@ -7,12 +7,16 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
+	"regexp"
 	"strings"
 )
 
 // DefaultRepo is the GitHub repository Catsitter ships from.
 const DefaultRepo = "xanderwasserman/catsitter"
+
+var repoName = regexp.MustCompile(`^[A-Za-z0-9-]+/[A-Za-z0-9._-]+$`)
 
 // ErrNotModified means the latest release has not changed since the given ETag.
 var ErrNotModified = errors.New("release not modified")
@@ -37,10 +41,10 @@ type Feed struct {
 }
 
 // FeedFromEnv honours the same CATSITTER_REPO and CATSITTER_RELEASE_BASE
-// overrides as the install scripts.
+// overrides as the install scripts. A repo that is not "owner/name" is ignored.
 func FeedFromEnv(userAgent string) Feed {
 	repo := os.Getenv("CATSITTER_REPO")
-	if repo == "" {
+	if !repoName.MatchString(repo) {
 		repo = DefaultRepo
 	}
 	return Feed{
@@ -51,8 +55,20 @@ func FeedFromEnv(userAgent string) Feed {
 	}
 }
 
-// ProjectURL is the repository home page.
-func (f Feed) ProjectURL() string { return "https://github.com/" + f.Repo }
+// PageURL is raw when it is an https://github.com page inside repo, and
+// otherwise the release page for tag, so a feed cannot hand the browser
+// another site, a file or a program.
+func PageURL(repo, raw, tag string) string {
+	fallback := "https://github.com/" + repo + "/releases/tag/" + url.PathEscape(tag)
+	u, err := url.Parse(raw)
+	if err != nil || u.Scheme != "https" || u.Host != "github.com" || u.User != nil || u.Opaque != "" {
+		return fallback
+	}
+	if !strings.HasPrefix(u.Path, "/"+repo+"/") || strings.Contains(u.Path, "..") || strings.ContainsAny(u.Path, "\\") {
+		return fallback
+	}
+	return u.String()
+}
 
 // DownloadURL is where a release file lives.
 func (f Feed) DownloadURL(tag, name string) string {
@@ -75,6 +91,9 @@ func (f Feed) latestURL() string {
 func (f Feed) Latest(ctx context.Context, etag string) (Release, string, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, f.latestURL(), nil)
 	if err != nil {
+		return Release{}, "", err
+	}
+	if err := httpsOnly(req.URL); err != nil {
 		return Release{}, "", err
 	}
 	req.Header.Set("Accept", "application/vnd.github+json")
@@ -104,9 +123,7 @@ func (f Feed) Latest(ctx context.Context, etag string) (Release, string, error) 
 	if err != nil {
 		return Release{}, "", err
 	}
-	if rel.URL == "" {
-		rel.URL = f.ProjectURL() + "/releases/tag/" + rel.Tag
-	}
+	rel.URL = PageURL(f.Repo, rel.URL, rel.Tag)
 	return rel, resp.Header.Get("ETag"), nil
 }
 
@@ -131,9 +148,25 @@ func parseLatest(body []byte) (Release, error) {
 	return Release{Version: v, Tag: "v" + v.String(), Notes: gh.Body, URL: gh.HTMLURL}, nil
 }
 
+// client is the configured client, made to refuse redirects off HTTPS.
 func (f Feed) client() *http.Client {
+	c := http.Client{}
 	if f.Client != nil {
-		return f.Client
+		c = *f.Client
 	}
-	return http.DefaultClient
+	c.CheckRedirect = func(req *http.Request, via []*http.Request) error {
+		if len(via) >= 10 {
+			return errors.New("too many redirects")
+		}
+		return httpsOnly(req.URL)
+	}
+	return &c
+}
+
+// httpsOnly refuses any URL that is not HTTPS, including a mirror base.
+func httpsOnly(u *url.URL) error {
+	if u.Scheme != "https" {
+		return fmt.Errorf("refusing %s: updates need HTTPS", u.Redacted())
+	}
+	return nil
 }

@@ -65,7 +65,9 @@ type Launcher interface {
 
 // Options configures a Service.
 type Options struct {
-	Version    string
+	Version string
+	// Repo is "owner/name"; release pages outside it are never shown.
+	Repo       string
 	GOOS       string
 	GOARCH     string
 	Releases   Releases
@@ -121,7 +123,7 @@ func NewService(opt Options) *Service {
 	}
 	if rel, ok := s.rec.Latest.Release(); ok && Offer(opt.Version, rel.Version) {
 		s.st.State = Available
-		s.st.Latest = rel
+		s.st.Latest = s.page(rel)
 	}
 	return s
 }
@@ -221,7 +223,7 @@ func (s *Service) check(ctx context.Context, manual bool) {
 	s.save()
 	s.st.Unreachable = false
 	if !s.installing() {
-		s.st.Latest = rel
+		s.st.Latest = s.page(rel)
 		s.st.State = Current
 		if Offer(s.opt.Version, rel.Version) {
 			s.st.State = Available
@@ -229,6 +231,16 @@ func (s *Service) check(ctx context.Context, manual bool) {
 	}
 	s.st.Manual = manual
 	s.st.Checks++
+}
+
+// page keeps the release URL only when it points into this repository.
+func (s *Service) page(rel Release) Release {
+	repo := s.opt.Repo
+	if repo == "" {
+		repo = DefaultRepo
+	}
+	rel.URL = PageURL(repo, rel.URL, rel.Tag)
+	return rel
 }
 
 func (s *Service) installing() bool {

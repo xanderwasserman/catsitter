@@ -14,29 +14,51 @@ type Version struct {
 }
 
 // ParseVersion reads "1.2.3", "v1.2.3" or "1.2.3-rc.1". Build metadata after
-// "+" is ignored.
+// "+" is checked and then ignored. Pre-release and build identifiers may only
+// hold letters, digits and hyphens, so a parsed version is safe in paths,
+// URLs and arguments.
 func ParseVersion(s string) (Version, bool) {
 	s = strings.TrimPrefix(strings.TrimSpace(s), "v")
-	if i := strings.IndexByte(s, '+'); i >= 0 {
-		s = s[:i]
+	s, build, hasBuild := strings.Cut(s, "+")
+	if hasBuild && !identifiers(build) {
+		return Version{}, false
 	}
-	core, pre, _ := strings.Cut(s, "-")
+	core, pre, hasPre := strings.Cut(s, "-")
+	if hasPre && !identifiers(pre) {
+		return Version{}, false
+	}
 	parts := strings.Split(core, ".")
 	if len(parts) != 3 {
 		return Version{}, false
 	}
 	var nums [3]int
 	for i, p := range parts {
+		if p == "" || strings.Trim(p, "0123456789") != "" || (len(p) > 1 && p[0] == '0') {
+			return Version{}, false
+		}
 		n, err := strconv.Atoi(p)
-		if err != nil || n < 0 || p == "" || (len(p) > 1 && p[0] == '0') {
+		if err != nil {
 			return Version{}, false
 		}
 		nums[i] = n
 	}
-	if strings.Contains(s, "-") && pre == "" {
-		return Version{}, false
-	}
 	return Version{Major: nums[0], Minor: nums[1], Patch: nums[2], Pre: pre}, true
+}
+
+// identifiers reports whether s is dot-separated, non-empty runs of
+// [0-9A-Za-z-], as semver requires for pre-release and build parts.
+func identifiers(s string) bool {
+	for _, id := range strings.Split(s, ".") {
+		if id == "" {
+			return false
+		}
+		for _, r := range id {
+			if !(r >= '0' && r <= '9' || r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r == '-') {
+				return false
+			}
+		}
+	}
+	return true
 }
 
 // IsRelease reports whether s is a published release version, not a dev or

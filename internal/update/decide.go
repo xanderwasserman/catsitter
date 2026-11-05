@@ -3,10 +3,11 @@ package update
 import "time"
 
 // Offer reports whether latest should be offered to a build running current.
-// Dev and snapshot builds are never offered an update.
+// Dev and snapshot builds are never offered an update, and a release build is
+// never offered a pre-release.
 func Offer(current string, latest Version) bool {
 	cur, ok := ParseVersion(current)
-	if !ok || cur.Pre != "" {
+	if !ok || cur.Pre != "" || latest.Pre != "" {
 		return false
 	}
 	return cur.Less(latest)

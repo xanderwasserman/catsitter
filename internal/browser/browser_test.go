@@ -18,3 +18,27 @@ func TestCommandPerOS(t *testing.T) {
 		}
 	}
 }
+
+func TestOnlyGitHubPagesOpen(t *testing.T) {
+	for _, raw := range []string{"https://github.com/xanderwasserman", "https://github.com/xanderwasserman/catsitter/releases/tag/v0.1.4"} {
+		if !allowed(raw) {
+			t.Errorf("%q refused", raw)
+		}
+	}
+	for _, raw := range []string{
+		"",
+		"file:///C:/Windows/System32/calc.exe",
+		`C:\Windows\System32\calc.exe`,
+		"/usr/bin/xcalc",
+		"http://github.com/xanderwasserman",
+		"https://evil.example/",
+		"https://github.com.evil.example/",
+		"https://user@github.com/x",
+		"https://github.com:8443/x",
+		"https://github.com/x y",
+	} {
+		if allowed(raw) {
+			t.Errorf("%q allowed", raw)
+		}
+	}
+}

@@ -247,7 +247,7 @@ func TestParseLatest(t *testing.T) {
 
 func TestFeedLatestIsConditional(t *testing.T) {
 	var agent, match string
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		agent, match = r.UserAgent(), r.Header.Get("If-None-Match")
 		if match == `"v3"` {
 			w.WriteHeader(http.StatusNotModified)
@@ -257,7 +257,7 @@ func TestFeedLatestIsConditional(t *testing.T) {
 		w.Write([]byte(`{"tag_name":"v0.1.3","body":"- hi"}`))
 	}))
 	defer srv.Close()
-	f := Feed{Repo: "o/r", Base: srv.URL, UserAgent: "catsitter/test"}
+	f := Feed{Repo: "o/r", Base: srv.URL, UserAgent: "catsitter/test", Client: srv.Client()}
 
 	rel, etag, err := f.Latest(context.Background(), "")
 	if err != nil || rel.Version.String() != "0.1.3" || etag != `"v3"` {
@@ -285,13 +285,13 @@ func TestFeedURLs(t *testing.T) {
 	if got := gh.DownloadURL("v1.0.0", "checksums.txt"); got != "https://github.com/o/r/releases/download/v1.0.0/checksums.txt" {
 		t.Error(got)
 	}
-	mirror := Feed{Repo: "o/r", Base: "http://mirror"}
-	if got := mirror.DownloadURL("v1.0.0", "a.zip"); got != "http://mirror/download/v1.0.0/a.zip" {
+	mirror := Feed{Repo: "o/r", Base: "https://mirror"}
+	if got := mirror.DownloadURL("v1.0.0", "a.zip"); got != "https://mirror/download/v1.0.0/a.zip" {
 		t.Error(got)
 	}
 }
 
-// releaseServer serves one release in the mirror layout.
+// releaseServer serves one release in the mirror layout over HTTPS.
 func releaseServer(t *testing.T, archive []byte, sums string) *httptest.Server {
 	t.Helper()
 	mux := http.NewServeMux()
@@ -300,7 +300,7 @@ func releaseServer(t *testing.T, archive []byte, sums string) *httptest.Server {
 		w.Header().Set("Content-Length", strconv.Itoa(len(archive)))
 		w.Write(archive)
 	})
-	srv := httptest.NewServer(mux)
+	srv := httptest.NewTLSServer(mux)
 	t.Cleanup(srv.Close)
 	return srv
 }
@@ -312,7 +312,7 @@ func TestStageVerifiesTheArchive(t *testing.T) {
 
 	srv := releaseServer(t, archive, sum(archive)+"  "+name+"\n")
 	var last, total int64
-	dir, err := Feed{Base: srv.URL}.Stage(context.Background(), rel, "linux", "amd64", func(d, t int64) { last, total = d, t })
+	dir, err := Feed{Base: srv.URL, Client: srv.Client()}.Stage(context.Background(), rel, "linux", "amd64", func(d, t int64) { last, total = d, t })
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -329,7 +329,7 @@ func TestStageVerifiesTheArchive(t *testing.T) {
 	}
 
 	bad := releaseServer(t, archive, sum([]byte("other"))+"  "+name+"\n")
-	if dir, err := (Feed{Base: bad.URL}).Stage(context.Background(), rel, "linux", "amd64", nil); err == nil {
+	if dir, err := (Feed{Base: bad.URL, Client: bad.Client()}).Stage(context.Background(), rel, "linux", "amd64", nil); err == nil {
 		os.RemoveAll(dir)
 		t.Fatal("a mismatched archive was staged")
 	} else if !strings.Contains(err.Error(), "checksum mismatch") {
@@ -337,7 +337,7 @@ func TestStageVerifiesTheArchive(t *testing.T) {
 	}
 
 	missing := releaseServer(t, archive, sum(archive)+"  something_else.zip\n")
-	if _, err := (Feed{Base: missing.URL}).Stage(context.Background(), rel, "linux", "amd64", nil); err == nil {
+	if _, err := (Feed{Base: missing.URL, Client: missing.Client()}).Stage(context.Background(), rel, "linux", "amd64", nil); err == nil {
 		t.Error("an archive without a checksum was staged")
 	}
 }
