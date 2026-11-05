@@ -3,7 +3,7 @@
 package mac
 
 /*
-#cgo LDFLAGS: -framework AppKit
+#cgo LDFLAGS: -framework AppKit -framework ApplicationServices
 #include <stdlib.h>
 
 void csAskAccess(const char *title, const char *body, const char *open, const char *later);
@@ -16,7 +16,7 @@ import "unsafe"
 const (
 	askTitle = "Let Catsitter nudge your Mac"
 	askBody  = "When you step away, Catsitter moves the mouse by one pixel and taps Shift so your status stays active. macOS needs your OK for that.\n\n" +
-		"Click Open Settings, then turn on Catsitter in the Accessibility list. Your screen stays awake in the meantime."
+		"Click Open Settings, then turn on Catsitter in the Accessibility list. If macOS asks as well, choose Open System Settings. Your screen stays awake in the meantime."
 	askOpen     = "Open Settings"
 	askLater    = "Not Now"
 	grantedNote = "Thanks! Catsitter can nudge now."

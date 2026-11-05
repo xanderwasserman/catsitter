@@ -94,8 +94,8 @@ stop_running() {
 }
 
 start_app() {
-	# Launch Services makes the app itself, not this terminal, the one that
-	# asks for Accessibility, so it shows up in that list on the first run.
+	# Through Launch Services, macOS checks Accessibility for Catsitter itself
+	# rather than for this terminal.
 	if [ "$goos" = "darwin" ] && open "$HOME/Applications/Catsitter.app" >/dev/null 2>&1; then
 		return 0
 	fi

@@ -122,3 +122,4 @@ jobs:
             dist/checksums.txt
             install.sh
           if-no-files-found: error
+          retention-days: 7
