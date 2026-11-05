@@ -12,7 +12,7 @@ func TestMenuStaysOnScreenAtBottomRight(t *testing.T) {
 		catY    = 964
 	)
 	menuH := menuPad*2 + rows*rowH
-	lay := placePet(true, catX, catY, cat, cat, menuW, menuH, screenW, screenH)
+	lay := placePet(true, catX, catY, cat, cat, menuW, menuH, box{0, 0, screenW, screenH})
 	if lay.Window.X < 0 || lay.Window.Y < 0 || lay.Window.X+lay.Window.W > screenW || lay.Window.Y+lay.Window.H > screenH {
 		t.Fatalf("window %+v is off the screen", lay.Window)
 	}
@@ -31,7 +31,7 @@ func TestMenuStaysOnScreenAtBottomRight(t *testing.T) {
 }
 
 func TestMenuOpensRightWhenThereIsRoom(t *testing.T) {
-	lay := placePet(true, 100, 80, 96, 96, menuW, 40, 1920, 1080)
+	lay := placePet(true, 100, 80, 96, 96, menuW, 40, box{0, 0, 1920, 1080})
 	if lay.Window.X != 100 || lay.Window.Y != 80 {
 		t.Fatalf("window %+v", lay.Window)
 	}

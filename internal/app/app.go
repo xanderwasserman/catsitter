@@ -25,6 +25,7 @@ type App struct {
 	saved     config.Config
 	path      string
 	paused    bool
+	recall    uint64
 	sched     *scheduler.Scheduler
 	gate      platform.Gate
 	closeFn   func()
@@ -176,6 +177,7 @@ func (a *App) View() control.View {
 		Interval:  a.cfg.IntervalDuration(),
 		Duration:  a.cfg.LimitDuration(),
 		Hidden:    a.cfg.HidePet,
+		Recall:    a.recall,
 		LastNudge: last,
 		WindowX:   a.cfg.WindowX,
 		WindowY:   a.cfg.WindowY,
@@ -229,6 +231,17 @@ func (a *App) ToggleHidden() {
 	a.cfg.HidePet = !a.cfg.HidePet
 	a.saved.HidePet = a.cfg.HidePet
 	a.saveLocked()
+}
+
+func (a *App) BringBack() {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.recall++
+	if a.cfg.HidePet {
+		a.cfg.HidePet = false
+		a.saved.HidePet = false
+		a.saveLocked()
+	}
 }
 
 func (a *App) Quit() {

@@ -8,14 +8,16 @@ import (
 
 // View is a snapshot of the settings the menus display.
 type View struct {
-	Paused    bool
-	Inhibit   bool
-	Mouse     bool
-	Shift     bool
-	Switch    bool
-	Interval  time.Duration
-	Duration  time.Duration
-	Hidden    bool
+	Paused   bool
+	Inhibit  bool
+	Mouse    bool
+	Shift    bool
+	Switch   bool
+	Interval time.Duration
+	Duration time.Duration
+	Hidden   bool
+	// Recall counts the requests to bring the cat back on screen.
+	Recall    uint64
 	LastNudge time.Time
 	WindowX   int
 	WindowY   int
@@ -35,6 +37,8 @@ type Controller interface {
 	SetInterval(time.Duration)
 	SetDuration(time.Duration)
 	ToggleHidden()
+	// BringBack shows the cat and puts it at its default spot on screen.
+	BringBack()
 	// RequestAccess explains the missing input permission and offers to fix it.
 	RequestAccess()
 	Quit()

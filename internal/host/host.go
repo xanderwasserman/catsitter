@@ -31,6 +31,10 @@ type Backends struct {
 	// Press reports where the pointer sat inside the window at the button press,
 	// and whether the button is held. Nil where the window's own cursor is that position.
 	Press func(deviceScale float64) (x, y int, pressed, down bool)
+	// Place moves the pet window across the whole desktop. It replaces
+	// Pointer and Ebitengine's window position where those disagree across
+	// monitors. Nil uses Ebitengine.
+	Place *platform.Placer
 	// NoteFocus records the app that should receive keys after the menu.
 	// RestoreFocus hands them back when this process still holds the keyboard.
 	// Both are nil where the menu does not take focus.

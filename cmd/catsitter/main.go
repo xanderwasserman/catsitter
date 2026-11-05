@@ -55,6 +55,7 @@ func main() {
 		MenuGrab:     backends.MenuGrab,
 		Pointer:      backends.Pointer,
 		Press:        backends.Press,
+		Place:        backends.Place,
 		NoteFocus:    backends.NoteFocus,
 		RestoreFocus: backends.RestoreFocus,
 		SingleThread: backends.SingleThread,

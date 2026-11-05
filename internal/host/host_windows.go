@@ -10,6 +10,7 @@ import (
 // Open wires Win32 idle time, SendInput, and SetThreadExecutionState.
 func Open() Backends {
 	focus := &win.Focus{}
+	window := win.NewWindow(platform.OverlayTitle)
 	return Backends{
 		Idle:         idleFunc(win.IdleTime),
 		Nudge:        win.Nudger{},
@@ -17,7 +18,7 @@ func Open() Backends {
 		Gate:         openGate{},
 		Close:        func() {},
 		Overlay:      func() error { return win.ExcludeFromSwitcher(platform.OverlayTitle) },
-		Pointer:      win.Pointer,
+		Place:        window.Placer(),
 		NoteFocus:    func() { focus.Note(platform.OverlayTitle) },
 		RestoreFocus: focus.Restore,
 		SingleThread: true,

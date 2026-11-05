@@ -35,6 +35,9 @@ type Desktop struct {
 	// Press reports where the pointer sat inside the window at the button press,
 	// and whether the button is held. Nil where the window's own cursor is that position.
 	Press func(deviceScale float64) (x, y int, pressed, down bool)
+	// Place moves the window across the whole desktop instead of Ebitengine.
+	// It also supplies the pointer, so Pointer is unused when it is set.
+	Place *platform.Placer
 	// NoteFocus records the app that should receive keys after the menu.
 	// RestoreFocus hands them back when this process still holds the keyboard.
 	// Both are nil where the menu does not take focus.
@@ -73,7 +76,7 @@ func Run(p Pet, ctrl control.Controller, bar *tray.Handle, desk Desktop) error {
 		pump:         desk.Pump,
 		overlay:      desk.Overlay,
 		menuGrab:     desk.MenuGrab,
-		pointAt:      desk.Pointer,
+		scr:          newScreen(desk),
 		buttonAt:     desk.Press,
 		noteFocus:    desk.NoteFocus,
 		restoreFocus: desk.RestoreFocus,
@@ -91,7 +94,7 @@ type game struct {
 	pump         func()
 	overlay      func() error
 	menuGrab     func(open bool) bool
-	pointAt      func(deviceScale float64) (x, y int, ok bool)
+	scr          screen
 	buttonAt     func(deviceScale float64) (x, y int, pressed, down bool)
 	noteFocus    func()
 	restoreFocus func()
@@ -111,6 +114,8 @@ type game struct {
 	dragged        bool
 	dragAbs        bool
 	grab           grab
+	scale          float64
+	recall         uint64
 }
 
 func (g *game) Layout(outsideWidth, outsideHeight int) (int, int) {
@@ -143,6 +148,7 @@ func (g *game) Update() error {
 		return ebiten.Termination
 	}
 	if !g.placed {
+		g.recall = view.Recall
 		g.place(view)
 		if g.tray != nil {
 			g.tray.Start()
@@ -164,34 +170,120 @@ func (g *game) Update() error {
 	} else {
 		ebiten.SetTPS(12)
 	}
+	g.followScale()
+	if view.Recall != g.recall {
+		g.recall = view.Recall
+		g.bringBack(wasMenu)
+	}
 	g.pointer(view)
-	g.applyWindow(monitorSize())
+	g.applyWindow()
+	g.keepOnScreen()
 	return nil
 }
 
 func (g *game) place(view control.View) {
+	g.scale = g.scr.scale()
 	if view.WindowSet {
-		g.catX, g.catY = view.WindowX, view.WindowY
+		g.catX, g.catY = g.scr.loaded(view.WindowX, view.WindowY)
 		g.haveCat = true
-		ebiten.SetWindowPosition(view.WindowX, view.WindowY)
+		g.scr.move(g.catX, g.catY)
 		return
 	}
-	mon := ebiten.Monitor()
-	if mon == nil {
+	g.goHome(g.homeArea())
+}
+
+// homeArea is the monitor area the window opened on.
+func (g *game) homeArea() (box, bool) {
+	x, y, ok := g.scr.position()
+	if !ok {
+		return box{}, false
+	}
+	return nearestArea(g.scr.areas(), x, y)
+}
+
+// goHome puts the cat at its default spot on the area and saves it.
+func (g *game) goHome(area box, ok bool) {
+	if !ok {
 		return
 	}
-	sw, sh := mon.Size()
-	x, y := sw-g.catW-80, sh-g.catH-140
-	if x < 16 {
-		x = 16
-	}
-	if y < 16 {
-		y = 16
-	}
+	x, y := homeSpot(area, g.catW, g.catH)
 	g.catX, g.catY = x, y
 	g.haveCat = true
-	ebiten.SetWindowPosition(x, y)
-	g.ctrl.SaveWindow(x, y)
+	g.moveAndSave(x, y)
+}
+
+// moveAndSave converts the position for saving before the move, which can
+// carry the window onto a monitor with another scale. followScale then puts
+// catX and catY in the new scale's units before anything else this frame
+// compares them with the window.
+func (g *game) moveAndSave(x, y int) {
+	sx, sy := g.scr.stored(x, y)
+	g.scr.move(x, y)
+	g.ctrl.SaveWindow(sx, sy)
+	g.followScale()
+}
+
+// bringBack answers the tray's recall: it closes the menu, ends any drag and
+// puts the cat at its default spot on the monitor with the pointer.
+func (g *game) bringBack(wasMenu bool) {
+	g.menu = false
+	g.dragging = false
+	g.dragged = false
+	g.grab = grab{}
+	g.syncMenuGrab()
+	if wasMenu {
+		g.handBack()
+	}
+	area, ok := g.homeArea()
+	if x, y, have := g.scr.pointer(); have && g.scr.desktop() {
+		area, ok = nearestArea(g.scr.areas(), x, y)
+	}
+	g.goHome(area, ok)
+	log.Printf("cat brought back to %d,%d", g.catX, g.catY)
+}
+
+// followScale keeps the cat's position in step with the window's scale.
+// g.scale is the scale catX and catY are written in.
+// The units are physical pixels over the scale, so a change of scale leaves
+// the old numbers describing another place. The window's own position is
+// used when it is the cat's; otherwise the numbers are converted.
+func (g *game) followScale() {
+	s := g.scr.scale()
+	old := g.scale
+	if s == old {
+		return
+	}
+	g.scale = s
+	if old <= 0 || s <= 0 || !g.haveCat || g.hidden {
+		return
+	}
+	if !g.menu && !g.grab.on {
+		if x, y, ok := g.scr.position(); ok {
+			g.catX, g.catY = x, y
+			return
+		}
+	}
+	g.catX, g.catY = rescale(g.catX, old, s), rescale(g.catY, old, s)
+}
+
+// rescale converts a position from one scale's units to another's.
+func rescale(v int, from, to float64) int {
+	return platform.DIP(platform.Physical(v, from), to)
+}
+
+// keepOnScreen is the safety net: a cat that shows on no monitor is moved
+// onto the nearest one and that position is saved.
+func (g *game) keepOnScreen() {
+	if !g.haveCat || g.hidden || g.menu || g.grab.on {
+		return
+	}
+	x, y, moved := rescue(box{g.catX, g.catY, g.catW, g.catH}, g.scr.areas(), g.scr.need())
+	if !moved {
+		return
+	}
+	log.Printf("cat was off screen at %d,%d; moved to %d,%d", g.catX, g.catY, x, y)
+	g.catX, g.catY = x, y
+	g.moveAndSave(x, y)
 }
 
 func (g *game) syncHidden(view control.View) {
@@ -199,17 +291,20 @@ func (g *game) syncHidden(view control.View) {
 		return
 	}
 	if view.Hidden {
-		g.savedX, g.savedY = g.catX, g.catY
+		g.savedX, g.savedY = g.scr.stored(g.catX, g.catY)
 		g.menu = false
 		g.dragging = false
 		g.grab = grab{}
-		ebiten.SetWindowPosition(-3000, -3000)
+		g.scr.move(parkSpot(g.scr.areas()))
 		g.hidden = true
 		return
 	}
-	g.catX, g.catY = g.savedX, g.savedY
+	// The window was parked, maybe on another scale. The position is read in
+	// the scale it has now, and followScale catches a change from the move.
+	g.scale = g.scr.scale()
+	g.catX, g.catY = g.scr.loaded(g.savedX, g.savedY)
 	g.haveCat = true
-	ebiten.SetWindowPosition(g.savedX, g.savedY)
+	g.scr.move(g.catX, g.catY)
 	g.hidden = false
 }
 
@@ -275,11 +370,15 @@ func (g *game) pointer(view control.View) {
 	just := inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonLeft)
 	down := held || pressed || ebiten.IsMouseButtonPressed(ebiten.MouseButtonLeft)
 	was := g.grab.on
-	g.grab = stepGrab(g.grab, pressed, px, py, just, cx, cy, down)
+	gx, gy := cx, cy
+	if just && !was && g.scr.desktop() {
+		gx, gy = g.localPointer(cx, cy)
+	}
+	g.grab = stepGrab(g.grab, pressed, px, py, just, gx, gy, down)
 	if g.grab.on && !was {
 		g.dragging = true
 		g.dragged = false
-		g.dragAbs = g.pointAt != nil
+		g.dragAbs = g.scr.hasPointer()
 	}
 	if g.grab.on {
 		g.dragging = true
@@ -287,7 +386,7 @@ func (g *game) pointer(view control.View) {
 		return
 	}
 	if g.dragging && g.dragged {
-		g.ctrl.SaveWindow(g.catX, g.catY)
+		g.ctrl.SaveWindow(g.scr.stored(g.catX, g.catY))
 	}
 	g.dragging = false
 	g.dragged = false
@@ -303,17 +402,32 @@ func (g *game) readPress() (x, y int, pressed, down bool) {
 	if g.buttonAt == nil {
 		return 0, 0, false, false
 	}
-	return g.buttonAt(g.deviceScale())
+	return g.buttonAt(deviceScale())
+}
+
+// localPointer is the pointer inside the window, read in the same units as
+// the window position. Ebitengine's cursor uses its own idea of the monitor
+// scale, which lags a move onto another monitor. cx, cy is that cursor.
+func (g *game) localPointer(cx, cy int) (int, int) {
+	px, py, ok := g.scr.pointer()
+	wx, wy, have := g.scr.position()
+	if !ok || !have {
+		return cx, cy
+	}
+	return px - wx, py - wy
 }
 
 func (g *game) moveDrag(cx, cy int) {
 	var nx, ny int
 	if g.dragAbs {
-		x, y, ok := g.samplePointer()
+		x, y, ok := g.scr.pointer()
 		if !ok {
 			return
 		}
 		nx, ny = grabbedWindow(x, y, g.grab.x, g.grab.y)
+		if g.scr.desktop() {
+			nx, ny = keepDragOnScreen(nx, ny, g.catW, g.catH, x, y, g.scr.areas())
+		}
 	} else {
 		wx, wy := ebiten.WindowPosition()
 		nx, ny = grabbedWindowFromCursor(wx, wy, cx, cy, g.grab.x, g.grab.y)
@@ -324,20 +438,6 @@ func (g *game) moveDrag(cx, cy int) {
 	g.catX, g.catY = nx, ny
 }
 
-func (g *game) deviceScale() float64 {
-	if mon := ebiten.Monitor(); mon != nil && mon.DeviceScaleFactor() > 0 {
-		return mon.DeviceScaleFactor()
-	}
-	return 1
-}
-
-func (g *game) samplePointer() (int, int, bool) {
-	if g.pointAt == nil {
-		return 0, 0, false
-	}
-	return g.pointAt(g.deviceScale())
-}
-
 func (g *game) syncMenuGrab() {
 	if g.menuGrab == nil {
 		return
@@ -345,15 +445,7 @@ func (g *game) syncMenuGrab() {
 	g.menuGrab(g.menu)
 }
 
-func monitorSize() (int, int) {
-	mon := ebiten.Monitor()
-	if mon == nil {
-		return 0, 0
-	}
-	return mon.Size()
-}
-
-func (g *game) applyWindow(screenW, screenH int) {
+func (g *game) applyWindow() {
 	if !g.haveCat || g.hidden {
 		return
 	}
@@ -361,10 +453,11 @@ func (g *game) applyWindow(screenW, screenH int) {
 	if g.menu {
 		menuH = menuPad*2 + len(menuRows(g.ctrl.View()))*rowH
 	}
-	g.lay = placePet(g.menu, g.catX, g.catY, g.catW, g.catH, menuW, menuH, screenW, screenH)
-	wx, wy := ebiten.WindowPosition()
-	if wx != g.lay.Window.X || wy != g.lay.Window.Y {
-		ebiten.SetWindowPosition(g.lay.Window.X, g.lay.Window.Y)
+	area, _ := nearestArea(g.scr.areas(), g.catX+g.catW/2, g.catY+g.catH/2)
+	g.lay = placePet(g.menu, g.catX, g.catY, g.catW, g.catH, menuW, menuH, area)
+	wx, wy, ok := g.scr.position()
+	if !ok || wx != g.lay.Window.X || wy != g.lay.Window.Y {
+		g.scr.move(g.lay.Window.X, g.lay.Window.Y)
 	}
 	ww, wh := ebiten.WindowSize()
 	if ww != g.lay.Window.W || wh != g.lay.Window.H {
