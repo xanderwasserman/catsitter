@@ -37,7 +37,8 @@ type Backends struct {
 	NoteFocus    func()
 	RestoreFocus func()
 	// SingleThread runs the pet window's Update on the main thread.
-	// The hooks above and the tray need that where they call AppKit.
+	// The hooks above and the tray need that where they call AppKit, or
+	// Win32 functions that send messages to the windows that thread owns.
 	SingleThread bool
 }
 

@@ -5,9 +5,6 @@ package win
 import (
 	"fmt"
 	"syscall"
-	"unsafe"
-
-	"golang.org/x/sys/windows"
 )
 
 const (
@@ -21,20 +18,16 @@ const (
 )
 
 var (
-	procFindWindowW       = user32.NewProc("FindWindowW")
 	procGetWindowLongPtrW = user32.NewProc("GetWindowLongPtrW")
 	procSetWindowLongPtrW = user32.NewProc("SetWindowLongPtrW")
 	procSetWindowPos      = user32.NewProc("SetWindowPos")
 )
 
 // ExcludeFromSwitcher gives the pet window the tool-window style so the
-// taskbar and Alt+Tab leave it out.
+// taskbar and Alt+Tab leave it out. It must run on the thread that owns
+// the window: changing the style sends that thread messages and waits.
 func ExcludeFromSwitcher(title string) error {
-	name, err := windows.UTF16PtrFromString(title)
-	if err != nil {
-		return err
-	}
-	hwnd, _, _ := procFindWindowW.Call(0, uintptr(unsafe.Pointer(name)))
+	hwnd := findWindow(title)
 	if hwnd == 0 {
 		return fmt.Errorf("window %q was not found", title)
 	}

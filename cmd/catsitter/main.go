@@ -47,7 +47,9 @@ func main() {
 	session := app.New(live, saved, path, backends)
 	session.Start()
 	defer session.Shutdown()
-	if err := pet.Run(cat.New(), session, tray.New(session), pet.Desktop{
+	bar := tray.New(session)
+	defer bar.Stop()
+	if err := pet.Run(cat.New(), session, bar, pet.Desktop{
 		Pump:         backends.Pump,
 		Overlay:      backends.Overlay,
 		MenuGrab:     backends.MenuGrab,
