@@ -22,7 +22,8 @@ type Handle struct {
 	once  sync.Once
 }
 
-// New builds the tray. Start must run on the main thread.
+// New builds the tray. New and Start must run on the main thread.
+// On Windows the tray window belongs to the thread that calls New.
 func New(ctrl control.Controller) *Handle {
 	h := &Handle{ctrl: ctrl}
 	start, end := systray.RunWithExternalLoop(func() { h.ready() }, func() {})
@@ -176,10 +177,17 @@ func setCheck(item *systray.MenuItem, on bool) {
 	}
 }
 
-// iconPNG draws the tray cat face on a 16-unit grid, scale pixels per unit.
+// iconPNG is iconImage encoded as PNG.
+func iconPNG(scale int, rim bool) []byte {
+	var buf bytes.Buffer
+	_ = png.Encode(&buf, iconImage(scale, rim))
+	return buf.Bytes()
+}
+
+// iconImage draws the tray cat face on a 16-unit grid, scale pixels per unit.
 // rim adds a light edge around the dark outline and moves the face down
 // one unit to make room for it.
-func iconPNG(scale int, rim bool) []byte {
+func iconImage(scale int, rim bool) *image.RGBA {
 	const n = 16
 	grid := image.NewRGBA(image.Rect(0, 0, n, n))
 	// A tiny original cat face for the tray.
@@ -230,9 +238,7 @@ func iconPNG(scale int, rim bool) []byte {
 			img.SetRGBA(x, y, grid.RGBAAt(x/scale, y/scale))
 		}
 	}
-	var buf bytes.Buffer
-	_ = png.Encode(&buf, img)
-	return buf.Bytes()
+	return img
 }
 
 // addRim fills each empty cell that touches the art, including diagonally.

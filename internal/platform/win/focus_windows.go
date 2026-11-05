@@ -42,11 +42,20 @@ func (f *Focus) Restore() {
 	procSetForegroundWindow.Call(uintptr(target))
 }
 
+// glfwClass is the window class of the Ebitengine window. Matching it
+// skips other windows with the same title, such as an Explorer window
+// open on the install folder.
+const glfwClass = "GLFW30"
+
 func findWindow(title string) uintptr {
+	class, err := windows.UTF16PtrFromString(glfwClass)
+	if err != nil {
+		return 0
+	}
 	name, err := windows.UTF16PtrFromString(title)
 	if err != nil {
 		return 0
 	}
-	hwnd, _, _ := procFindWindowW.Call(0, uintptr(unsafe.Pointer(name)))
+	hwnd, _, _ := procFindWindowW.Call(uintptr(unsafe.Pointer(class)), uintptr(unsafe.Pointer(name)))
 	return hwnd
 }

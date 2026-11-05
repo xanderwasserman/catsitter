@@ -20,5 +20,6 @@ func Open() Backends {
 		Pointer:      win.Pointer,
 		NoteFocus:    func() { focus.Note(platform.OverlayTitle) },
 		RestoreFocus: focus.Restore,
+		SingleThread: true,
 	}
 }
