@@ -222,7 +222,7 @@ func iconPNG(scale int, rim bool) []byte {
 		}
 	}
 	if rim {
-		addRim(grid, color.RGBA{255, 246, 234, 190})
+		addRim(grid, color.RGBA{128, 123, 117, 128})
 	}
 	img := image.NewRGBA(image.Rect(0, 0, n*scale, n*scale))
 	for y := 0; y < n*scale; y++ {

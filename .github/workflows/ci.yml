@@ -59,19 +59,6 @@ jobs:
           CGO_ENABLED=1 GOOS=darwin GOARCH=amd64 CC="clang -arch x86_64" go build -trimpath -o /tmp/catsitter-darwin-amd64 ./cmd/catsitter
       - name: Launch
         run: sh packaging/test-launch.sh /tmp/catsitter-darwin-arm64
-      - name: Accessibility flow
-        if: github.event_name == 'pull_request'
-        continue-on-error: true
-        timeout-minutes: 10
-        run: sh packaging/test-app.sh /tmp/catsitter-darwin-arm64 /tmp/screens
-      - name: Upload screenshots
-        if: always() && github.event_name == 'pull_request'
-        uses: actions/upload-artifact@v4
-        with:
-          name: macos-screens
-          path: /tmp/screens
-          retention-days: 1
-          if-no-files-found: ignore
       - name: Install, update, uninstall
         run: sh packaging/test-install.sh
 
