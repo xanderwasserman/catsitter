@@ -90,6 +90,7 @@ func (h *Handle) ready() {
 	}
 	systray.AddSeparator()
 	hide := systray.AddMenuItem("Hide cat", "Hide the cat and keep working")
+	recall := systray.AddMenuItem("Bring cat back", "Put the cat back on screen")
 	systray.AddSeparator()
 	quit := systray.AddMenuItem("Quit", "Quit Catsitter")
 
@@ -112,6 +113,8 @@ func (h *Handle) ready() {
 				h.ctrl.SetSwitch(!h.ctrl.View().Switch)
 			case <-hide.ClickedCh:
 				h.ctrl.ToggleHidden()
+			case <-recall.ClickedCh:
+				h.ctrl.BringBack()
 			case <-quit.ClickedCh:
 				h.ctrl.Quit()
 				return
