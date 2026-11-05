@@ -3,4 +3,4 @@
 package version
 
 // Version is the semantic version shown by --version.
-var Version = "0.1.0"
+var Version = "dev"

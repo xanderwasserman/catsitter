@@ -16,7 +16,7 @@ func TestOneOffFlagsStayOutOfTheFile(t *testing.T) {
 	live.Interval = "5s"
 	live.Pixels = 4
 	live.HidePet = true
-	a := New(live, saved, path, host.Backends{})
+	a := New(live, saved, path, host.Backends{}, nil)
 	a.Shutdown()
 	got, err := config.Load(path)
 	if err != nil {
@@ -33,7 +33,7 @@ func TestMenuChangeIsSavedWithoutTheOverlay(t *testing.T) {
 	live := saved
 	live.Interval = "5s"
 	live.Pixels = 4
-	a := New(live, saved, path, host.Backends{})
+	a := New(live, saved, path, host.Backends{}, nil)
 	a.SetMouse(false)
 	a.SetInterval(30 * time.Second)
 	if a.View().Interval != 30*time.Second || a.View().Mouse {

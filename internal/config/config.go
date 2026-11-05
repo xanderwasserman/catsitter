@@ -25,6 +25,8 @@ type Config struct {
 	WindowX   int    `json:"windowX"`
 	WindowY   int    `json:"windowY"`
 	WindowSet bool   `json:"windowSet"`
+	// CheckUpdates looks for a new release on launch and twice a day.
+	CheckUpdates bool `json:"checkUpdates"`
 }
 
 // Defaults are the first-run settings.
@@ -37,6 +39,8 @@ func Defaults() Config {
 		Mouse:    true,
 		Shift:    true,
 		Switch:   false,
+
+		CheckUpdates: true,
 	}
 }
 

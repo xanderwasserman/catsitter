@@ -16,7 +16,17 @@ import (
 	"github.com/xanderwasserman/catsitter/internal/host"
 	"github.com/xanderwasserman/catsitter/internal/platform"
 	"github.com/xanderwasserman/catsitter/internal/scheduler"
+	"github.com/xanderwasserman/catsitter/internal/update"
 )
+
+// Updates is the release checker and installer.
+type Updates interface {
+	Status() update.Status
+	Run(ctx context.Context)
+	CheckNow()
+	Install()
+	SetAuto(bool)
+}
 
 // App is the running Catsitter session.
 type App struct {
@@ -35,19 +45,22 @@ type App struct {
 	lastNudge atomic.Int64
 	prompted  atomic.Bool
 	// settled is set once the permission has been seen. No prompt follows it.
-	settled atomic.Bool
+	settled   atomic.Bool
+	updates   Updates
+	aboutAsks atomic.Int64
 }
 
 // New prepares a session. live is what this run uses, including one-off
 // command-line flags. saved is the copy written to disk. Call Start to
-// run the scheduler.
-func New(live, saved config.Config, path string, b host.Backends) *App {
+// run the scheduler. updates may be nil.
+func New(live, saved config.Config, path string, b host.Backends, updates Updates) *App {
 	a := &App{
 		cfg:     live,
 		saved:   saved,
 		path:    path,
 		gate:    b.Gate,
 		closeFn: b.Close,
+		updates: updates,
 	}
 	a.trusted.Store(b.Gate == nil || b.Gate.Trusted())
 	a.sched = scheduler.New(b.Idle, b.Nudge, b.Inhibit, nil, rand.IntN, func(t time.Time) {
@@ -66,6 +79,9 @@ func (a *App) Start() {
 	go a.signals()
 	go a.watchPermission(ctx)
 	go a.loop(ctx)
+	if a.updates != nil {
+		go a.updates.Run(ctx)
+	}
 }
 
 func (a *App) loop(ctx context.Context) {
@@ -168,6 +184,10 @@ func (a *App) View() control.View {
 	if n := a.lastNudge.Load(); n != 0 {
 		last = time.Unix(0, n)
 	}
+	var st update.Status
+	if a.updates != nil {
+		st = a.updates.Status()
+	}
 	return control.View{
 		Paused:    a.paused,
 		Inhibit:   a.cfg.Inhibit,
@@ -184,8 +204,33 @@ func (a *App) View() control.View {
 		WindowSet: a.cfg.WindowSet,
 		Trusted:   a.trusted.Load(),
 		Quitting:  a.quit.Load(),
+		Update:    st,
+		AboutAsks: int(a.aboutAsks.Load()),
 	}
 }
+
+func (a *App) CheckForUpdates() {
+	if a.updates != nil {
+		a.updates.CheckNow()
+	}
+}
+
+func (a *App) InstallUpdate() {
+	if a.updates != nil {
+		a.updates.Install()
+	}
+}
+
+// SetAutoUpdate saves the automatic check setting. A --no-update-check run
+// still saves what the user picks here.
+func (a *App) SetAutoUpdate(v bool) {
+	a.setBool(func(c *config.Config) { c.CheckUpdates = v })
+	if a.updates != nil {
+		a.updates.SetAuto(v)
+	}
+}
+
+func (a *App) ShowAbout() { a.aboutAsks.Add(1) }
 
 func (a *App) TogglePause() {
 	a.mu.Lock()

@@ -78,9 +78,29 @@ if ([string]::IsNullOrEmpty($repo)) {
     $repo = 'xanderwasserman/catsitter'
 }
 $releaseBase = $env:CATSITTER_RELEASE_BASE
+# A running Catsitter hands over a verified download in this folder. It is
+# not passed on to the Catsitter this script starts.
+if (-not [string]::IsNullOrEmpty($env:CATSITTER_INSTALL_FROM)) {
+    $releaseBase = $env:CATSITTER_INSTALL_FROM
+}
+Remove-Item Env:CATSITTER_INSTALL_FROM -ErrorAction SilentlyContinue
 $installDir = Join-Path $env:LOCALAPPDATA 'Programs\Catsitter'
 $installExe = Join-Path $installDir 'catsitter.exe'
 $shortcutPath = Join-Path $env:APPDATA 'Microsoft\Windows\Start Menu\Programs\Catsitter.lnk'
+
+# Save-CatsitterFile copies a release file from a URL or a local folder.
+function Save-CatsitterFile {
+    param(
+        [Parameter(Mandatory = $true)][string]$Source,
+        [Parameter(Mandatory = $true)][string]$Destination
+    )
+    if ($Source -match '^(https?|file)://') {
+        Invoke-WebRequest -Uri $Source -OutFile $Destination -UseBasicParsing
+    }
+    else {
+        Copy-Item -LiteralPath $Source -Destination $Destination
+    }
+}
 
 function Get-InstalledVersion {
     if (-not (Test-Path -LiteralPath $installExe)) {
@@ -188,7 +208,7 @@ try {
         else {
             $latestUrl = ($releaseBase.TrimEnd('/') + '/latest')
         }
-        Invoke-WebRequest -Uri $latestUrl -OutFile $latestPath -UseBasicParsing
+        Save-CatsitterFile -Source $latestUrl -Destination $latestPath
         $latestText = Get-Content -LiteralPath $latestPath -Raw
         $tag = ''
         if ($latestText -match '"tag_name"\s*:\s*"([^"]+)"') {
@@ -221,8 +241,8 @@ try {
     Write-InstallMessage "Downloading Catsitter $ver (windows/$arch)"
     $checksumPath = Join-Path $tempRoot 'checksums.txt'
     $assetPath = Join-Path $tempRoot $asset
-    Invoke-WebRequest -Uri "$base/checksums.txt" -OutFile $checksumPath -UseBasicParsing
-    Invoke-WebRequest -Uri "$base/$asset" -OutFile $assetPath -UseBasicParsing
+    Save-CatsitterFile -Source "$base/checksums.txt" -Destination $checksumPath
+    Save-CatsitterFile -Source "$base/$asset" -Destination $assetPath
 
     $expected = ''
     foreach ($line in (Get-Content -LiteralPath $checksumPath)) {

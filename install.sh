@@ -8,6 +8,12 @@ set -eu
 
 REPO="${CATSITTER_REPO:-xanderwasserman/catsitter}"
 RELEASE_BASE="${CATSITTER_RELEASE_BASE:-}"
+# A running Catsitter hands over a verified download in this directory. It is
+# not passed on to the Catsitter this script starts.
+if [ -n "${CATSITTER_INSTALL_FROM:-}" ]; then
+	RELEASE_BASE=$CATSITTER_INSTALL_FROM
+fi
+unset CATSITTER_INSTALL_FROM
 
 main() {
 die() {
@@ -143,7 +149,19 @@ if [ "$uninstall" -eq 1 ]; then
 	exit 0
 fi
 
-command -v curl >/dev/null 2>&1 || die "curl is required"
+# fetch copies a release file from a URL or a local directory.
+fetch() {
+	case "$1" in
+	http://* | https://* | file://*)
+		command -v curl >/dev/null 2>&1 || die "curl is required"
+		curl -fsSL "$1" -o "$2"
+		;;
+	*)
+		cp "$1" "$2"
+		;;
+	esac
+}
+
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT INT TERM
 
@@ -151,9 +169,9 @@ if [ -n "$want_version" ]; then
 	ver=$(strip_v "$want_version")
 else
 	if [ -n "$RELEASE_BASE" ]; then
-		curl -fsSL "$RELEASE_BASE/latest" -o "$tmp/latest" || die "could not read the latest version"
+		fetch "$RELEASE_BASE/latest" "$tmp/latest" || die "could not read the latest version"
 	else
-		curl -fsSL "https://api.github.com/repos/$REPO/releases/latest" -o "$tmp/latest" || die "could not read the latest release"
+		fetch "https://api.github.com/repos/$REPO/releases/latest" "$tmp/latest" || die "could not read the latest release"
 	fi
 	tag=$(sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$tmp/latest" | head -n 1)
 	if [ -z "$tag" ]; then
@@ -182,8 +200,8 @@ else
 fi
 
 echo "Downloading Catsitter $ver ($goos/$goarch)"
-curl -fsSL "$base/checksums.txt" -o "$tmp/checksums.txt" || die "could not download checksums.txt"
-curl -fsSL "$base/$asset" -o "$tmp/asset" || die "could not download $asset"
+fetch "$base/checksums.txt" "$tmp/checksums.txt" || die "could not download checksums.txt"
+fetch "$base/$asset" "$tmp/asset" || die "could not download $asset"
 
 expected=$(awk -v name="$asset" '
 	$1 ~ /^[0-9A-Fa-f]{64}$/ {

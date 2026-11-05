@@ -36,7 +36,22 @@ On Linux, the script prints the line to add to your shell profile if `~/.local/b
 
 ### Update
 
-Run the install command again. If you already have the latest version, the script leaves it alone. Otherwise it stops Catsitter if it's running, replaces it and starts the new version. On macOS, read [the note about Accessibility after an update](#macos).
+Catsitter looks for a new release when it starts and every 12 hours while it runs. When one is out, the cat wears a small **!** and both menus show **Update to 0.1.4**. Nothing is installed until you choose it:
+
+- Choose **Update to …** in either menu to update right away.
+- Click the cat while it wears the **!** to see what's new first, then choose **Update now**.
+
+<p align="center">
+  <img src="docs/update.png" alt="The update panels: the offer with release notes, the download progress, the cat's note after it restarts, and a failed update">
+</p>
+
+Catsitter downloads the release for your system, checks it against the release's `checksums.txt`, and then runs the same install script you used to install it. That script replaces the app and restarts it, and the cat says hello from the new version. If the download or the check fails, the cat tells you why and keeps running the version you had. If the script fails after it has stopped Catsitter, run the install command again. On macOS, read [the note about Accessibility after an update](#macos).
+
+The checks are a single small request to GitHub. When nothing has changed, GitHub doesn't count it against its rate limit. When you're offline, the checks fail quietly. To turn them off, untick **Check for updates automatically** in About, set `"checkUpdates": false` in the [settings file](#settings), or start Catsitter with `--no-update-check`. **Check for updates** in either menu always works.
+
+You can also update from a terminal with `catsitter --update`, or just check with `catsitter --check-update`. On macOS that's `~/Applications/Catsitter.app/Contents/MacOS/catsitter --update`. Running the install command again works as before: if you already have the latest version, the script leaves it alone. Otherwise it stops Catsitter if it's running, replaces it and starts the new version.
+
+One-click updates only work for a copy the install script put in place (see the table above). Other copies, such as one you built yourself, show **Get Catsitter …**, which points you to the release page instead.
 
 ### Install a specific version
 
@@ -70,7 +85,7 @@ Catsitter needs Accessibility permission to move the mouse and press Shift. On f
 
 Until you allow it, Catsitter keeps the screen awake but skips the mouse and Shift nudges. The cat's menu and the menu-bar menu both say that nudges are paused, and both have an **Allow Accessibility** item that shows the explanation again.
 
-**After every update you need to turn the switch on again.** The app isn't signed, so macOS treats each new build as a different app. The installer removes the old entry and reminds you. When it restarts Catsitter, Catsitter asks again and you turn the switch back on.
+**After every update you need to turn the switch on again.** The app isn't signed, so macOS treats each new build as a different app. The installer removes the old entry and reminds you, and so does the update panel before you click **Update now**. When it restarts Catsitter, Catsitter asks again and you turn the switch back on.
 
 - Start Catsitter as an app, not by running the binary from a terminal. macOS gives the permission to whatever launched the program, so a terminal launch asks for the terminal instead.
 - The app is unsigned. The installer clears the quarantine flag, so Gatekeeper usually stays quiet. If it does block Catsitter, go to Privacy & Security and choose **Open Anyway**.
@@ -91,7 +106,7 @@ If the app doesn't start, install the usual graphics client libraries. On Debian
 ## Using it
 
 <p align="center">
-  <img src="docs/menu.png" alt="The cat with its right-click menu open, showing the default settings">
+  <img src="docs/menu.png" alt="The cat with its right-click menu open, showing the default settings and an update">
 </p>
 
 Right-click the cat to open its menu, or use the tray or menu-bar icon. Both menus have the same controls:
@@ -101,7 +116,13 @@ Right-click the cat to open its menu, or use the tray or menu-bar icon. Both men
 - **Idle every**: how long you need to be idle before a nudge: 5s, 10s, 30s, 1m, 2m, 5m or 10m.
 - **Until I stop it / For 2h**: how long to keep watch: 30m, 1h, 2h, 4h, 8h, or until you stop it. When the time is up, Catsitter quits and releases the inhibitor. Time spent paused doesn't count. The choice is saved, so later launches stop after the same time until you change it.
 - **Hide cat / Show cat**: hide the cat and keep working in the background. The cat stays hidden across restarts, and only the tray icon can bring it back. With no tray, quit Catsitter and set `"hidePet": false` in the settings file.
+- **Check for updates / Update to …**: see [Update](#update).
+- **About Catsitter**: the version, who made it, a link to this project, and the automatic update setting. The tray shows this line as **Catsitter 0.1.3 by @xanderwasserman**. Clicking it shows the About panel, and if the cat is hidden, the cat peeks out while the panel is open.
 - **Quit**.
+
+<p align="center">
+  <img src="docs/about.png" alt="The About panel: the cat, the version, made by @xanderwasserman, and a link to the project">
+</p>
 
 In the tray, the idle time and the watch time are submenus. In the cat's menu, each click steps to the next value and closes the menu, so right-click again to keep going.
 
@@ -128,6 +149,8 @@ Changes you make in either menu are saved here:
 | Linux | `~/.config/catsitter/config.json` |
 | Windows | `%AppData%\catsitter\config.json` |
 
+`checkUpdates` turns the automatic update checks on or off. Catsitter also keeps a small `update.json` next to the settings file, with the time of the last check and the last release it saw.
+
 The jiggle distance (`pixels`), the number of window switches (`tabs`) and the switch modifier (`modifier`) aren't in the menus. Change them by editing this file while Catsitter isn't running, or for one run with the flags below.
 
 ## Command-line flags
@@ -147,6 +170,9 @@ Flags apply to a single run and aren't saved to the settings file. Any flag you 
 | `--shift`, `--no-shift` | Turn the Shift tap on or off. |
 | `--switch`, `--no-switch` | Turn window switching on or off. |
 | `--no-pet` | Start with the cat hidden. |
+| `--no-update-check` | Don't check for updates automatically during this run. |
+| `--check-update` | Say whether a newer version is out, then exit. |
+| `--update` | Download, verify and install the newest version, start it, then exit. |
 | `--version` | Print the version and exit. |
 
 Examples:
@@ -171,6 +197,8 @@ You need Go 1.25 or newer.
 go test ./...
 go build -o catsitter ./cmd/catsitter
 ```
+
+A local build reports its version as `dev` and never checks for updates.
 
 macOS builds need CGO (it's on by default) and the Xcode Command Line Tools, because Catsitter uses IOKit, CoreGraphics and AppKit. A local build is a bare binary, not an app bundle, so macOS gives the Accessibility permission to the terminal you run it from. Linux and Windows builds don't need CGO, so you can cross-compile them:
 

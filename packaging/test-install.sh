@@ -212,6 +212,11 @@ sum_after=$("$bin" --version; wc -c <"$bin")
 still=$(tr -d ' \t\r\n' <"$marker")
 [ "$still" = "$after" ] || die "skip stopped the running Catsitter"
 
+# A running Catsitter installs a verified download from a local directory.
+CATSITTER_INSTALL_FROM="$server_root" sh "$script" --version 0.1.0
+got=$("$bin" --version | tr -d ' \t\r\n')
+[ "$got" = "0.1.0" ] || die "local directory install left version $got"
+
 sh "$script" --uninstall
 [ ! -e "$bin" ] || die "uninstall left the binary"
 if [ "$goos" = "linux" ]; then
