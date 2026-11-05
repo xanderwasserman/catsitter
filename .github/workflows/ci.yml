@@ -113,3 +113,12 @@ jobs:
           distribution: goreleaser
           version: "~> v2"
           args: release --snapshot --clean
+      - name: Upload macOS builds
+        uses: actions/upload-artifact@v4
+        with:
+          name: catsitter-macos
+          path: |
+            dist/catsitter_*_darwin_*.zip
+            dist/checksums.txt
+            install.sh
+          if-no-files-found: error
