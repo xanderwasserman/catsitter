@@ -57,6 +57,8 @@ jobs:
           set -eu
           CGO_ENABLED=1 GOOS=darwin GOARCH=arm64 go build -trimpath -o /tmp/catsitter-darwin-arm64 ./cmd/catsitter
           CGO_ENABLED=1 GOOS=darwin GOARCH=amd64 CC="clang -arch x86_64" go build -trimpath -o /tmp/catsitter-darwin-amd64 ./cmd/catsitter
+      - name: Launch
+        run: sh packaging/test-launch.sh /tmp/catsitter-darwin-arm64
       - name: Install, update, uninstall
         run: sh packaging/test-install.sh
 
@@ -72,7 +74,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y shellcheck
-          shellcheck -s sh install.sh packaging/test-install.sh
+          shellcheck -s sh install.sh packaging/test-install.sh packaging/test-launch.sh
       - name: Install, update, uninstall
         run: sh packaging/test-install.sh
 
