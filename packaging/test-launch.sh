@@ -35,9 +35,14 @@ sleep "$seconds"
 
 alive=1
 kill -0 "$pid" >/dev/null 2>&1 || alive=0
+kind=$(lsappinfo info -only ApplicationType "$(lsappinfo find "pid=$pid")" 2>/dev/null || true)
 cat "$log"
 if grep -q "Main Thread Checker" "$log"; then
 	die "UI API called off the main thread"
 fi
 [ "$alive" -eq 1 ] || die "Catsitter exited within ${seconds}s"
-echo "Catsitter kept running for ${seconds}s with no main-thread reports"
+case "$kind" in
+*UIElement*) ;;
+*) die "Catsitter is not a UI element, so the Dock and Cmd+Tab show it: $kind" ;;
+esac
+echo "Catsitter kept running for ${seconds}s as a UI element with no main-thread reports"
