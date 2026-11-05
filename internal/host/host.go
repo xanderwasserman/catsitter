@@ -36,6 +36,9 @@ type Backends struct {
 	// Both are nil where the menu does not take focus.
 	NoteFocus    func()
 	RestoreFocus func()
+	// SingleThread runs the pet window's Update on the main thread.
+	// The hooks above and the tray need that where they call AppKit.
+	SingleThread bool
 }
 
 type idleFunc func() (time.Duration, error)

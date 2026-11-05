@@ -47,7 +47,8 @@ func RunOnMain(fn func() error) error {
 	}
 }
 
-// Drain runs queued main-thread work. The Ebiten update loop calls it.
+// Drain runs queued main-thread work. The pet window calls it from Update,
+// which runs on the main thread.
 func Drain() {
 	mainMu.Lock()
 	batch := mainQ

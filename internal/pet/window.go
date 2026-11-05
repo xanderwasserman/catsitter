@@ -40,6 +40,9 @@ type Desktop struct {
 	// Both are nil where the menu does not take focus.
 	NoteFocus    func()
 	RestoreFocus func()
+	// SingleThread runs Update and Draw on the main thread, so the hooks
+	// and the tray start there too.
+	SingleThread bool
 }
 
 // Run shows the pet until the controller asks to quit.
@@ -56,6 +59,7 @@ func Run(p Pet, ctrl control.Controller, bar *tray.Handle, desk Desktop) error {
 	op := &ebiten.RunGameOptions{
 		ScreenTransparent: true,
 		SkipTaskbar:       true,
+		SingleThread:      desk.SingleThread,
 		X11ClassName:      platform.OverlayTitle,
 		X11InstanceName:   "catsitter",
 	}

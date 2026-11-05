@@ -55,6 +55,7 @@ func main() {
 		Press:        backends.Press,
 		NoteFocus:    backends.NoteFocus,
 		RestoreFocus: backends.RestoreFocus,
+		SingleThread: backends.SingleThread,
 	}); err != nil {
 		log.Fatal(err)
 	}

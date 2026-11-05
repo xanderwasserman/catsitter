@@ -22,5 +22,6 @@ func Open() Backends {
 		Overlay:      mac.ExcludeFromSwitcher,
 		NoteFocus:    front.Note,
 		RestoreFocus: front.Restore,
+		SingleThread: true,
 	}
 }
