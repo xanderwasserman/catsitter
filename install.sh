@@ -218,6 +218,9 @@ fi
 
 if [ "$goos" = "darwin" ]; then
 	app="$HOME/Applications/Catsitter.app"
+	if [ -d "$app" ]; then
+		echo "macOS ties Accessibility to each build of this unsigned app, so allow Catsitter again in Privacy & Security > Accessibility."
+	fi
 	rm -rf "$app"
 	forget_permission
 	mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"

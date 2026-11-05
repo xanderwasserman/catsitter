@@ -42,7 +42,7 @@ func (h *Handle) Start() {
 	})
 }
 
-// survive keeps a tray failure from ending the app. The cat menu still works.
+// survive keeps a Go panic in the tray from ending the app. The cat menu still works.
 func survive(step string) {
 	if r := recover(); r != nil {
 		log.Printf("tray %s failed: %v", step, r)

@@ -52,11 +52,11 @@ func TestMenuClosedLeftClickIsNotConsumed(t *testing.T) {
 
 func TestMissingAccessLeadsTheMenu(t *testing.T) {
 	rows := menuRows(control.View{})
-	if rows[0].id != "access" || rows[1].id != "access" {
+	if rows[0].id != "paused" || rows[1].id != "access" {
 		t.Fatalf("first rows %+v", rows[:2])
 	}
 	for _, row := range menuRows(control.View{Trusted: true}) {
-		if row.id == "access" {
+		if row.id == "paused" || row.id == "access" {
 			t.Fatalf("access row while trusted: %+v", row)
 		}
 	}

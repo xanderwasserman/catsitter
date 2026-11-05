@@ -489,7 +489,7 @@ func menuRows(view control.View) []menuRow {
 		return rows
 	}
 	access := []menuRow{
-		{id: "access", label: "Nudges paused (no access)"},
+		{id: "paused", label: "Nudges paused (no access)"},
 		{id: "access", label: "Allow Accessibility..."},
 	}
 	return append(access, rows...)

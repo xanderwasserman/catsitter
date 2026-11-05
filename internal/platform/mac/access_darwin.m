@@ -45,14 +45,15 @@ static NSTextField *csLabel(const char *text, NSFont *font) {
 	return label;
 }
 
-static NSButton *csButton(const char *title, SEL action, NSString *key) {
-	NSButton *button = [NSButton buttonWithTitle:@(title) target:csAccess action:action];
+static NSButton *csButton(const char *title, id target, SEL action, NSString *key) {
+	NSButton *button = [NSButton buttonWithTitle:@(title) target:target action:action];
 	[button setKeyEquivalent:key];
 	return button;
 }
 
-static void csBuildAccessPanel(const char *title, const char *body, const char *open, const char *later) {
-	csAccess = [[CSAccessPanel alloc] init];
+static CSAccessPanel *csBuildAccessPanel(const char *window, const char *title, const char *body,
+                                         const char *open, const char *later) {
+	CSAccessPanel *access = [[CSAccessPanel alloc] init];
 
 	NSImageView *icon = [NSImageView imageViewWithImage:[NSApp applicationIconImage]];
 	[icon setTranslatesAutoresizingMaskIntoConstraints:NO];
@@ -72,8 +73,8 @@ static void csBuildAccessPanel(const char *title, const char *body, const char *
 	[top setSpacing:16];
 
 	NSStackView *buttons = [NSStackView stackViewWithViews:@[
-		csButton(later, @selector(later:), @"\033"),
-		csButton(open, @selector(openSettings:), @"\r"),
+		csButton(later, access, @selector(later:), @"\033"),
+		csButton(open, access, @selector(openSettings:), @"\r"),
 	]];
 
 	NSStackView *all = [NSStackView stackViewWithViews:@[top, buttons]];
@@ -89,22 +90,23 @@ static void csBuildAccessPanel(const char *title, const char *body, const char *
 	                                                       NSWindowStyleMaskNonactivatingPanel
 	                                               backing:NSBackingStoreBuffered
 	                                                 defer:NO] autorelease];
-	[panel setTitle:@"Allow Accessibility"];
+	[panel setTitle:@(window)];
 	[panel setReleasedWhenClosed:NO];
 	[panel setHidesOnDeactivate:NO];
 	[panel setLevel:NSFloatingWindowLevel];
 	[panel setCollectionBehavior:NSWindowCollectionBehaviorMoveToActiveSpace];
 	[panel setContentView:all];
 	[panel setContentSize:[all fittingSize]];
-	csAccess.panel = panel;
+	access.panel = panel;
+	return access;
 }
 
 // csAskAccess shows why Accessibility is needed, with a button that opens
 // its settings. It returns at once and reuses one panel.
-void csAskAccess(const char *title, const char *body, const char *open, const char *later) {
+void csAskAccess(const char *window, const char *title, const char *body, const char *open, const char *later) {
 	@autoreleasepool {
 		if (csAccess == nil) {
-			csBuildAccessPanel(title, body, open, later);
+			csAccess = csBuildAccessPanel(window, title, body, open, later);
 		}
 		csActivateSelf();
 		[csAccess.panel center];

@@ -6,7 +6,7 @@ package mac
 #cgo LDFLAGS: -framework AppKit -framework ApplicationServices
 #include <stdlib.h>
 
-void csAskAccess(const char *title, const char *body, const char *open, const char *later);
+void csAskAccess(const char *window, const char *title, const char *body, const char *open, const char *later);
 void csCloseAccess(void);
 void csToast(const char *text);
 */
@@ -14,8 +14,9 @@ import "C"
 import "unsafe"
 
 const (
-	askTitle = "Let Catsitter nudge your Mac"
-	askBody  = "When you step away, Catsitter moves the mouse by one pixel and taps Shift so your status stays active. macOS needs your OK for that.\n\n" +
+	askWindow = "Allow Accessibility"
+	askTitle  = "Let Catsitter nudge your Mac"
+	askBody   = "When you step away, Catsitter moves the mouse by one pixel and taps Shift so your status stays active. macOS needs your OK for that.\n\n" +
 		"Click Open Settings, then turn on Catsitter in the Accessibility list. If macOS asks as well, choose Open System Settings. Your screen stays awake in the meantime."
 	askOpen     = "Open Settings"
 	askLater    = "Not Now"
@@ -26,13 +27,13 @@ const (
 // It returns at once. The panel opens on the main thread.
 func Prompt() {
 	Post(func() {
-		strs := []*C.char{C.CString(askTitle), C.CString(askBody), C.CString(askOpen), C.CString(askLater)}
+		strs := []*C.char{C.CString(askWindow), C.CString(askTitle), C.CString(askBody), C.CString(askOpen), C.CString(askLater)}
 		defer func() {
 			for _, s := range strs {
 				C.free(unsafe.Pointer(s))
 			}
 		}()
-		C.csAskAccess(strs[0], strs[1], strs[2], strs[3])
+		C.csAskAccess(strs[0], strs[1], strs[2], strs[3], strs[4])
 	})
 }
 
