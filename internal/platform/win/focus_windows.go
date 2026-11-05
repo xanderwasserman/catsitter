@@ -12,6 +12,7 @@ import (
 var (
 	procGetForegroundWindow = user32.NewProc("GetForegroundWindow")
 	procSetForegroundWindow = user32.NewProc("SetForegroundWindow")
+	procFindWindowExW       = user32.NewProc("FindWindowExW")
 )
 
 // Focus remembers the window that had the keyboard before this one.
@@ -42,20 +43,25 @@ func (f *Focus) Restore() {
 	procSetForegroundWindow.Call(uintptr(target))
 }
 
-// glfwClass is the window class of the Ebitengine window. Matching it
-// skips other windows with the same title, such as an Explorer window
-// open on the install folder.
-const glfwClass = "GLFW30"
-
+// findWindow returns this process's top-level window with the title.
+// Checking the process skips other windows with the same title, such as an
+// Explorer window open on the install folder.
 func findWindow(title string) uintptr {
-	class, err := windows.UTF16PtrFromString(glfwClass)
-	if err != nil {
-		return 0
-	}
 	name, err := windows.UTF16PtrFromString(title)
 	if err != nil {
 		return 0
 	}
-	hwnd, _, _ := procFindWindowW.Call(uintptr(unsafe.Pointer(class)), uintptr(unsafe.Pointer(name)))
-	return hwnd
+	self := windows.GetCurrentProcessId()
+	var hwnd uintptr
+	for {
+		hwnd, _, _ = procFindWindowExW.Call(0, hwnd, 0, uintptr(unsafe.Pointer(name)))
+		if hwnd == 0 {
+			return 0
+		}
+		var pid uint32
+		windows.GetWindowThreadProcessId(windows.HWND(hwnd), &pid)
+		if pid == self {
+			return hwnd
+		}
+	}
 }

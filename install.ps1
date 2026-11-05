@@ -157,8 +157,7 @@ function Write-CatsitterPathTip {
             return
         }
     }
-    Write-InstallMessage 'Next time, open Catsitter from the Start menu.'
-    Write-InstallMessage 'Optional: to also run catsitter from a terminal, add this line to your PowerShell profile:'
+    Write-InstallMessage 'Optional: to run catsitter from a terminal, add this line to your PowerShell profile:'
     Write-InstallMessage '$env:Path = "$env:LOCALAPPDATA\Programs\Catsitter;" + $env:Path'
 }
 
@@ -275,6 +274,7 @@ try {
     } else {
         Write-InstallMessage 'Started Catsitter.'
     }
+    Write-InstallMessage 'Next time, open Catsitter from the Start menu.'
     Write-CatsitterPathTip
 }
 finally {

@@ -39,3 +39,15 @@ func TestIcoHoldsEachScale(t *testing.T) {
 		}
 	}
 }
+
+func TestIcoDim(t *testing.T) {
+	if icoDim(16) != 16 || icoDim(256) != 0 {
+		t.Fatalf("16 -> %d, 256 -> %d", icoDim(16), icoDim(256))
+	}
+	defer func() {
+		if recover() == nil {
+			t.Fatal("257 px did not panic")
+		}
+	}()
+	icoDim(257)
+}

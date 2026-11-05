@@ -32,7 +32,7 @@ You don't need sudo or administrator rights. The script downloads the latest rel
 | Linux | `~/.local/bin/catsitter`, plus a desktop entry and an icon |
 | Windows | `%LOCALAPPDATA%\Programs\Catsitter`, plus a Start Menu shortcut |
 
-On Linux, the script prints the line to add to your shell profile if `~/.local/bin` isn't on your `PATH`. On Windows it prints an optional line for your PowerShell profile. That's only needed to run `catsitter` from a terminal, and it isn't an error.
+On Linux, the script prints the line to add to your shell profile if `~/.local/bin` isn't on your `PATH`. On Windows, if the install folder isn't on your `PATH`, it prints an optional line for your PowerShell profile. You only need it to run `catsitter` from a terminal, and it isn't an error.
 
 ### Update
 

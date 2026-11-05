@@ -34,11 +34,11 @@ type wndClassEx struct {
 	IconSm     windows.Handle
 }
 
-// ownWindow creates a hidden window of the Ebitengine class on the calling
-// thread. The caller destroys it on the same thread.
+// ownWindow creates a hidden top-level window on the calling thread.
+// The caller destroys it on the same thread.
 func ownWindow(t *testing.T, title string) uintptr {
 	t.Helper()
-	class, _ := windows.UTF16PtrFromString(glfwClass)
+	class, _ := windows.UTF16PtrFromString("CatsitterTest")
 	module, _, _ := procGetModuleHandleW.Call(0)
 	wc := wndClassEx{WndProc: procDefWindowProcW.Addr(), Instance: windows.Handle(module), ClassName: class}
 	wc.Size = uint32(unsafe.Sizeof(wc))

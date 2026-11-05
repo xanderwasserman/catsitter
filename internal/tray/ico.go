@@ -3,6 +3,7 @@ package tray
 import (
 	"bytes"
 	"encoding/binary"
+	"fmt"
 	"image"
 	"image/color"
 )
@@ -10,28 +11,36 @@ import (
 // icoFile packs the rimmed tray icon at each scale into an .ico.
 // Each image is a 32-bit BGRA bitmap with an empty AND mask.
 func icoFile(scales ...int) []byte {
-	var images [][]byte
-	var sizes []int
+	var images []*image.RGBA
 	for _, s := range scales {
-		img := iconImage(s, true)
-		images = append(images, icoBitmap(img))
-		sizes = append(sizes, img.Bounds().Dx())
+		images = append(images, iconImage(s, true))
 	}
 	var buf bytes.Buffer
 	le := binary.LittleEndian
 	_ = binary.Write(&buf, le, [3]uint16{0, 1, uint16(len(images))})
 	offset := 6 + 16*len(images)
-	for i, data := range images {
-		dim := byte(sizes[i])
+	var data [][]byte
+	for _, img := range images {
+		bits := icoBitmap(img)
+		dim := icoDim(img.Bounds().Dx())
 		buf.Write([]byte{dim, dim, 0, 0})
 		_ = binary.Write(&buf, le, [2]uint16{1, 32})
-		_ = binary.Write(&buf, le, [2]uint32{uint32(len(data)), uint32(offset)})
-		offset += len(data)
+		_ = binary.Write(&buf, le, [2]uint32{uint32(len(bits)), uint32(offset)})
+		offset += len(bits)
+		data = append(data, bits)
 	}
-	for _, data := range images {
-		buf.Write(data)
+	for _, bits := range data {
+		buf.Write(bits)
 	}
 	return buf.Bytes()
+}
+
+// icoDim is a directory entry's size byte, where 0 means 256.
+func icoDim(px int) byte {
+	if px < 1 || px > 256 {
+		panic(fmt.Sprintf("ico images are 1 to 256 px, not %d", px))
+	}
+	return byte(px % 256)
 }
 
 // icoBitmap is a BITMAPINFOHEADER, the image bottom-up with straight alpha,

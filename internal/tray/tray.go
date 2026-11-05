@@ -50,13 +50,16 @@ func survive(step string) {
 	}
 }
 
-// Stop removes the icon.
+// Stop removes the icon where it would outlive the process. Call it on the
+// main thread after the pet window closes.
 func (h *Handle) Stop() {
-	if h == nil || h.end == nil {
+	if !removeOnStop || h == nil || h.end == nil {
 		return
 	}
-	h.end()
+	end := h.end
 	h.end = nil
+	defer survive("stop")
+	end()
 }
 
 func (h *Handle) ready() {

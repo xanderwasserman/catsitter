@@ -5,3 +5,7 @@ package tray
 // at 200%, and the taskbar shows it at half that. The rim keeps the dark
 // outline readable on a dark taskbar.
 func menuBarIcon() []byte { return icoFile(1, 2, 3, 4) }
+
+// removeOnStop deletes the icon on quit. Explorer otherwise keeps it until
+// the pointer passes over it.
+const removeOnStop = true
