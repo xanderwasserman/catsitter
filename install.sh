@@ -94,6 +94,11 @@ stop_running() {
 }
 
 start_app() {
+	# Launch Services makes the app itself, not this terminal, the one that
+	# asks for Accessibility, so it shows up in that list on the first run.
+	if [ "$goos" = "darwin" ] && open "$HOME/Applications/Catsitter.app" >/dev/null 2>&1; then
+		return 0
+	fi
 	# A subshell so the pet survives this script exiting.
 	(
 		nohup "$install_bin" >/dev/null 2>&1 &
@@ -110,9 +115,18 @@ warn_path() {
 	echo 'export PATH="$HOME/.local/bin:$PATH"' >&2
 }
 
+# A new binary does not match the old Accessibility entry, which would look
+# on and not work. Clearing it lets the next launch add a fresh one.
+forget_permission() {
+	if command -v tccutil >/dev/null 2>&1; then
+		tccutil reset Accessibility com.xanderwasserman.catsitter >/dev/null 2>&1 || true
+	fi
+}
+
 remove_install() {
 	if [ "$goos" = "darwin" ]; then
 		rm -rf "$HOME/Applications/Catsitter.app"
+		forget_permission
 	else
 		rm -f "$install_bin"
 		rm -f "$HOME/.local/share/applications/catsitter.desktop"
@@ -205,6 +219,7 @@ fi
 if [ "$goos" = "darwin" ]; then
 	app="$HOME/Applications/Catsitter.app"
 	rm -rf "$app"
+	forget_permission
 	mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
 	cp "$tmp/extract/catsitter" "$install_bin"
 	chmod 755 "$install_bin"

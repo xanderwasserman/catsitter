@@ -65,7 +65,7 @@ trap cleanup EXIT INT TERM
 build_stub() {
 	ver=$1
 	out=$2
-	go build -ldflags "-X main.version=$ver" -o "$out" "$root/packaging/stub"
+	go build -ldflags "-X main.version=$ver -X main.marker=$marker" -o "$out" "$root/packaging/stub"
 }
 
 publish() {
