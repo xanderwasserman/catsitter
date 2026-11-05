@@ -215,6 +215,8 @@ if [ "$goos" = "darwin" ]; then
 <dict>
 	<key>CFBundleExecutable</key>
 	<string>catsitter</string>
+	<key>CFBundleIconFile</key>
+	<string>icon</string>
 	<key>CFBundleIdentifier</key>
 	<string>com.xanderwasserman.catsitter</string>
 	<key>CFBundleName</key>
@@ -236,10 +238,14 @@ if [ "$goos" = "darwin" ]; then
 </dict>
 </plist>
 EOF
-	if [ -f "$tmp/extract/icon.png" ]; then
-		cp "$tmp/extract/icon.png" "$app/Contents/Resources/icon.png"
-	elif [ -f "$tmp/extract/packaging/icon.png" ]; then
-		cp "$tmp/extract/packaging/icon.png" "$app/Contents/Resources/icon.png"
+	if [ -f "$tmp/extract/icon.icns" ]; then
+		cp "$tmp/extract/icon.icns" "$app/Contents/Resources/icon.icns"
+	fi
+	# Re-register the bundle so Finder, Spotlight and Launchpad show the new icon.
+	touch "$app"
+	lsregister=/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister
+	if [ -x "$lsregister" ]; then
+		"$lsregister" -f "$app" >/dev/null 2>&1 || true
 	fi
 	if command -v xattr >/dev/null 2>&1; then
 		xattr -dr com.apple.quarantine "$app" 2>/dev/null || true

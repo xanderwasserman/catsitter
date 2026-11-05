@@ -88,4 +88,6 @@ macOS builds need CGO for IOKit, CoreGraphics, and the menu bar. Linux and Windo
 CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -o catsitter.exe ./cmd/catsitter
 ```
 
+The macOS app icon is built from `packaging/icon.png`. Run `go run ./packaging/icns packaging/icon.png packaging/icon.icns` after changing it.
+
 GoReleaser builds the six release archives and `checksums.txt`. Tag `v0.1.0` (or any `v*`) to publish them, with `install.sh` and `install.ps1` attached to the release.
