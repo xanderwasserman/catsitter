@@ -62,3 +62,4 @@ type openGate struct{}
 
 func (openGate) Trusted() bool { return true }
 func (openGate) Prompt()       {}
+func (openGate) Granted()      {}

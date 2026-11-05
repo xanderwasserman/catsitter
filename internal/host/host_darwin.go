@@ -8,6 +8,7 @@ type macGate struct{}
 
 func (macGate) Trusted() bool { return mac.Trusted() }
 func (macGate) Prompt()       { mac.Prompt() }
+func (macGate) Granted()      { mac.Granted() }
 
 // Open wires CoreGraphics, IOKit, and the Accessibility check.
 func Open() Backends {

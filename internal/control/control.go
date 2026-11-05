@@ -35,6 +35,8 @@ type Controller interface {
 	SetInterval(time.Duration)
 	SetDuration(time.Duration)
 	ToggleHidden()
+	// RequestAccess explains the missing input permission and offers to fix it.
+	RequestAccess()
 	Quit()
 	SaveWindow(x, y int)
 }

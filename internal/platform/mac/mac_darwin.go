@@ -75,7 +75,6 @@ static void csKey(unsigned short code, int down, unsigned long long flags) {
 import "C"
 import (
 	"fmt"
-	"os/exec"
 	"time"
 
 	"github.com/xanderwasserman/catsitter/internal/platform"
@@ -107,22 +106,6 @@ func IdleTime() (time.Duration, error) {
 
 // Trusted reports whether Accessibility permission has been granted.
 func Trusted() bool { return C.csTrusted() == 1 }
-
-// Prompt explains the missing permission and opens the Accessibility pane.
-func Prompt() {
-	fmt.Println(`Catsitter can keep the display awake, but macOS is hiding the keyboard and mouse.
-
-To allow the jiggle and the key taps, open System Settings → Privacy & Security → Accessibility and turn Catsitter on. The sleep inhibitor stays on in the meantime, and the other actions start on their own once you allow them.`)
-	urls := []string{
-		"x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension?Privacy_Accessibility",
-		"x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility",
-	}
-	for _, u := range urls {
-		if err := exec.Command("open", u).Run(); err == nil {
-			return
-		}
-	}
-}
 
 const (
 	vkShift   = 0x38

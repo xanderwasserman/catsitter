@@ -128,10 +128,10 @@ func (g *game) Update() error {
 	if g.noteFocus != nil {
 		g.noteFocus()
 	}
+	g.keepOutOfSwitcher()
 	if g.pump != nil {
 		g.pump()
 	}
-	g.keepOutOfSwitcher()
 	// CloseMainWindow and the window's close button both arrive here.
 	// Quit first so Shutdown can save the config before the process ends.
 	if ebiten.IsWindowBeingClosed() {
@@ -379,6 +379,8 @@ func (g *game) activate(cy int, view control.View) {
 		return
 	}
 	switch rows[idx].id {
+	case "access":
+		g.ctrl.RequestAccess()
 	case "pause":
 		g.ctrl.TogglePause()
 	case "inhibit":
@@ -486,5 +488,9 @@ func menuRows(view control.View) []menuRow {
 	if view.Trusted {
 		return rows
 	}
-	return append([]menuRow{{id: "access", label: "Accessibility is off"}}, rows...)
+	access := []menuRow{
+		{id: "access", label: "Nudges paused (no access)"},
+		{id: "access", label: "Allow Accessibility..."},
+	}
+	return append(access, rows...)
 }

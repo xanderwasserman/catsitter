@@ -47,6 +47,14 @@ func RunOnMain(fn func() error) error {
 	}
 }
 
+// Post queues fn for the main thread and returns without waiting.
+func Post(fn func()) {
+	call := mainCall{fn: func() error { fn(); return nil }}
+	mainMu.Lock()
+	mainQ = append(mainQ, call)
+	mainMu.Unlock()
+}
+
 // Drain runs queued main-thread work. The pet window calls it from Update,
 // which runs on the main thread.
 func Drain() {
@@ -55,6 +63,9 @@ func Drain() {
 	mainQ = nil
 	mainMu.Unlock()
 	for _, call := range batch {
-		call.done <- call.fn()
+		err := call.fn()
+		if call.done != nil {
+			call.done <- err
+		}
 	}
 }
