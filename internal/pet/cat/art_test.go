@@ -8,6 +8,9 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
+
+	"github.com/xanderwasserman/catsitter/internal/pet"
 )
 
 func TestFramesAreCats(t *testing.T) {
@@ -101,6 +104,35 @@ func TestSleepIsUnhurried(t *testing.T) {
 			t.Fatalf("sleep pose ending at frame %d is up for %d frames, want more than %d", i, run, fps/2)
 		}
 		run = 0
+	}
+}
+
+// TestSleepKeepsItsPaceWhileAPanelIsOpen draws sleep at 60 window ticks a
+// second, as while a panel is open, and sees the same pose as at 12 at every
+// moment, with each pose up for more than half a second and a five-second loop.
+func TestSleepKeepsItsPaceWhileAPanelIsOpen(t *testing.T) {
+	sleep := Frames()["sleep"]
+	at := func(elapsed time.Duration) *image.RGBA {
+		return sleep[frameAt(pet.AnimTick(elapsed), len(sleep))]
+	}
+	const step = time.Second / 60
+	var changes []time.Duration
+	for elapsed := step; elapsed < 10*time.Second; elapsed += step {
+		calm := elapsed.Truncate(time.Second / 12)
+		if at(elapsed) != at(calm) {
+			t.Fatalf("at %v the pose at 60 ticks a second differs from 12", elapsed)
+		}
+		if at(elapsed) != at(elapsed-step) {
+			changes = append(changes, elapsed)
+		}
+	}
+	for i := 1; i < len(changes); i++ {
+		if gap := changes[i] - changes[i-1]; gap <= time.Second/2 {
+			t.Fatalf("a sleep pose was up for %v at 60 ticks a second", gap)
+		}
+	}
+	if loop := len(poses(sleep)); len(changes) <= loop || changes[loop]-changes[0] < 4*time.Second {
+		t.Fatalf("sleep loop at 60 ticks a second: pose changes at %v", changes)
 	}
 }
 
