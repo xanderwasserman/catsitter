@@ -14,7 +14,7 @@ import (
 var docsDir = filepath.Join("..", "..", "..", "docs")
 
 // previewed are the animations with a docs/<name>.png sheet and .gif.
-var previewed = []string{"walk", "sleep", "paws"}
+var previewed = []string{"idle", "walk", "sleep", "paws"}
 
 // readmeStrip is docs/cat.png: idle, walking, asleep and pawing at 5x.
 func readmeStrip() *image.RGBA {
@@ -28,10 +28,11 @@ func readmeStrip() *image.RGBA {
 	return img
 }
 
-// frameSheet is docs/<name>.png: every frame of an animation at 8x.
+// frameSheet is docs/<name>.png: every pose of an animation at 8x, with a
+// held frame drawn once.
 func frameSheet(name string) *image.RGBA {
 	const scale, gap = 8, 32
-	frames := Frames()[name]
+	frames := poses(Frames()[name])
 	step := frameW*scale + gap
 	img := image.NewRGBA(image.Rect(0, 0, step*len(frames)-gap, frameH*scale))
 	for i, f := range frames {

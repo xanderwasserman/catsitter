@@ -3,6 +3,7 @@ package cat
 import (
 	"bytes"
 	"image"
+	"image/color"
 	"image/png"
 	"os"
 	"path/filepath"
@@ -28,9 +29,6 @@ func TestFramesAreCats(t *testing.T) {
 			}
 		}
 	}
-	if sameImage(all["idle"][0], all["idle"][2]) {
-		t.Fatal("blink frame matches open eyes")
-	}
 	if sameImage(all["idle"][0], all["paws"][0]) {
 		t.Fatal("paw frame matches idle")
 	}
@@ -40,6 +38,57 @@ func TestFramesAreCats(t *testing.T) {
 	if sameImage(all["sleep"][0], all["sleep"][2]) {
 		t.Fatal("sleep frames do not change")
 	}
+}
+
+// TestBlinkIsSlowAndRare plays idle at the app's six frames a second: the
+// eyes stay open for most of a loop of at least four seconds, then close
+// once and stay shut for at least half a second.
+func TestBlinkIsSlowAndRare(t *testing.T) {
+	const fps = 6
+	idle := Frames()["idle"]
+	if len(idle) < 4*fps {
+		t.Fatalf("idle loop is %d frames, want at least %d", len(idle), 4*fps)
+	}
+	wide := eyePixels(idle[0])
+	if wide == 0 {
+		t.Fatal("idle starts with its eyes shut")
+	}
+	var open, blinks, shut, longestShut int
+	for i, f := range idle {
+		eyes := eyePixels(f)
+		if eyes == wide {
+			open++
+		} else if eyePixels(idle[(i+len(idle)-1)%len(idle)]) == wide {
+			blinks++
+		}
+		if eyes == 0 {
+			shut++
+			longestShut = max(longestShut, shut)
+		} else {
+			shut = 0
+		}
+	}
+	if open*4 < len(idle)*3 {
+		t.Fatalf("eyes open for %d of %d frames, want at least three quarters", open, len(idle))
+	}
+	if blinks != 1 {
+		t.Fatalf("idle blinks %d times a loop, want once", blinks)
+	}
+	if longestShut < fps/2 {
+		t.Fatalf("eyes shut for %d frames, want at least %d", longestShut, fps/2)
+	}
+}
+
+// eyePixels counts the iris and pupil pixels in a frame.
+func eyePixels(img *image.RGBA) int {
+	n := 0
+	for i := 0; i < len(img.Pix); i += 4 {
+		c := color.RGBA{img.Pix[i], img.Pix[i+1], img.Pix[i+2], img.Pix[i+3]}
+		if c == palette[pEye] || c == palette[pPupil] {
+			n++
+		}
+	}
+	return n
 }
 
 func TestSheetMatchesFile(t *testing.T) {
