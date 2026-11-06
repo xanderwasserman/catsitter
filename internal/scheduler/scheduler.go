@@ -72,17 +72,22 @@ func New(idle platform.IdleDetector, nudge platform.Nudger, inhibit platform.Inh
 }
 
 // Update replaces the settings used on the next tick.
-// Changing Duration starts the limit over.
+// Changing Duration starts the limit over, and so does resuming once the
+// limit has been reached. Time spent paused never counts.
 func (s *Scheduler) Update(next Settings) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if next.Duration != s.settings.Duration {
+	resumed := s.settings.Paused && !next.Paused
+	if next.Duration != s.settings.Duration || (resumed && s.expired) {
 		s.used = 0
+		s.expired = false
 	}
 	s.settings = next
 }
 
-// Expired reports whether the duration limit has been reached.
+// Expired reports whether the duration limit has been reached. It stays true
+// until the limit starts over (see Update), and the scheduler does nothing
+// while it is true.
 func (s *Scheduler) Expired() bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -103,7 +108,7 @@ func (s *Scheduler) Tick() {
 	s.lastTick = now
 	st := s.settings
 
-	if st.Paused {
+	if st.Paused || s.expired {
 		s.setInhibit(false)
 		s.mu.Unlock()
 		return

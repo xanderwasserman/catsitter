@@ -70,7 +70,8 @@ func New(live, saved config.Config, path string, b host.Backends, updates Update
 	return a
 }
 
-// Start runs the scheduler until Quit or the duration limit.
+// Start runs the scheduler until Quit. When the duration limit is reached
+// the session pauses and keeps running.
 func (a *App) Start() {
 	ctx, cancel := context.WithCancel(context.Background())
 	a.mu.Lock()
@@ -93,13 +94,16 @@ func (a *App) loop(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-tick.C:
-			a.sched.Tick()
-			if a.sched.Expired() {
-				log.Printf("the watch is over")
-				a.Quit()
-				return
-			}
+			a.step()
 		}
+	}
+}
+
+// step runs one scheduler pass and pauses once the watch time runs out.
+func (a *App) step() {
+	a.sched.Tick()
+	if a.sched.Expired() {
+		a.endWatch()
 	}
 }
 
@@ -242,6 +246,19 @@ func (a *App) TogglePause() {
 	} else {
 		log.Printf("resumed")
 	}
+}
+
+// endWatch pauses the session when the watch time runs out, as Pause does.
+// Resuming starts a fresh watch of the same length.
+func (a *App) endWatch() {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.paused {
+		return
+	}
+	a.paused = true
+	a.pushLocked()
+	log.Printf("the watch is over; paused")
 }
 
 func (a *App) SetInhibit(v bool) { a.setBool(func(c *config.Config) { c.Inhibit = v }) }

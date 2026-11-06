@@ -113,8 +113,8 @@ Right-click the cat to open its menu, or use the tray or menu-bar icon. Both men
 
 - **Pause / Resume**: stop everything for now, including the sleep inhibitor, so the machine can sleep. The cat sleeps until you resume.
 - **Keep awake**, **Mouse jiggle**, **Shift tap**, **Switch windows**: turn each action on or off (see below).
-- **Idle every**: how long you need to be idle before a nudge: 5s, 10s, 30s, 1m, 2m, 5m or 10m.
-- **Until I stop it / For 2h**: how long to keep watch: 30m, 1h, 2h, 4h, 8h, or until you stop it. When the time is up, Catsitter quits and releases the inhibitor. Time spent paused doesn't count. The choice is saved, so later launches stop after the same time until you change it.
+- **Nudge after 10s idle**: how long you need to be idle before a nudge: 5s, 10s, 30s, 1m, 2m, 5m or 10m. After a nudge, the next one waits for another full interval.
+- **Watch 2h, then pause / Watch with no time limit**: how long to keep watch: 30m, 1h, 2h, 4h, 8h, or no time limit, which keeps going until you pause or quit. When the time is up, Catsitter pauses and the cat falls asleep, just as if you had chosen **Pause**. Choose **Resume** to start the same watch time over. Time spent paused doesn't count. The choice is saved, so later launches use the same watch time until you change it.
 - **Hide cat / Show cat**: hide the cat and keep working in the background. The cat stays hidden across restarts, and only the tray icon can bring it back. With no tray, quit Catsitter and set `"hidePet": false` in the settings file.
 - **Check for updates / Update to …**: see [Update](#update).
 - **About Catsitter**: the version, who made it, a link to this project, and the automatic update setting. The tray shows this line as **Catsitter 0.1.3 by @xanderwasserman**. Clicking it shows the About panel, and if the cat is hidden, the cat peeks out while the panel is open.
@@ -124,7 +124,7 @@ Right-click the cat to open its menu, or use the tray or menu-bar icon. Both men
   <img src="docs/about.png" alt="The About panel: the cat, the version, made by @xanderwasserman, and a link to the project">
 </p>
 
-In the tray, the idle time and the watch time are submenus. In the cat's menu, each click steps to the next value and closes the menu, so right-click again to keep going.
+In the tray, the idle time and the watch time are submenus. In the cat's menu, each click steps to the next value. The menu stays open while you change settings, so you can keep clicking.
 
 Drag the cat to move it. It remembers where you left it. Press Escape or click somewhere else to close its menu.
 

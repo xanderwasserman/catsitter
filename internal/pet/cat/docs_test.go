@@ -20,7 +20,7 @@ var previewed = []string{"idle", "walk", "sleep", "paws"}
 func readmeStrip() *image.RGBA {
 	const scale, step = 5, 180
 	all := Frames()
-	picks := []*image.RGBA{all["idle"][0], all["walk"][0], all["sleep"][2], all["paws"][0]}
+	picks := []*image.RGBA{all["idle"][0], all["walk"][0], poses(all["sleep"])[2], all["paws"][0]}
 	img := image.NewRGBA(image.Rect(0, 0, step*(len(picks)-1)+frameW*scale, frameH*scale))
 	for i, f := range picks {
 		drawScaled(img, f, i*step, scale)

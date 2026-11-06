@@ -61,7 +61,7 @@ func Run(p Pet, ctrl control.Controller, bar *tray.Handle, desk Desktop) error {
 	ebiten.SetWindowTitle(platform.OverlayTitle)
 	ebiten.SetWindowSize(catW, catH)
 	ebiten.SetWindowClosingHandled(true)
-	ebiten.SetTPS(12)
+	ebiten.SetTPS(AnimRate)
 	op := &ebiten.RunGameOptions{
 		ScreenTransparent: true,
 		SkipTaskbar:       true,
@@ -73,6 +73,7 @@ func Run(p Pet, ctrl control.Controller, bar *tray.Handle, desk Desktop) error {
 	return ebiten.RunGameWithOptions(&game{
 		pet:          p,
 		ctrl:         ctrl,
+		shown:        time.Now(),
 		tray:         bar,
 		catW:         catW,
 		catH:         catH,
@@ -95,6 +96,8 @@ type game struct {
 	tray *tray.Handle
 	catW int
 	catH int
+	// shown is when the window opened; animations run on time since then.
+	shown time.Time
 
 	pixel        *ebiten.Image
 	paint        *painter
@@ -110,7 +113,7 @@ type game struct {
 	overlayDone    bool
 	overlayWarned  bool
 	overlayTries   int
-	menuSawFocus   bool
+	menuWatch      focusWatch
 	placed         bool
 	menu           bool
 	hidden         bool
@@ -180,7 +183,7 @@ func (g *game) Update() error {
 	if g.panelShown() {
 		ebiten.SetTPS(60)
 	} else {
-		ebiten.SetTPS(12)
+		ebiten.SetTPS(AnimRate)
 	}
 	g.followScale()
 	if view.Recall != g.recall {
@@ -351,19 +354,19 @@ func (g *game) pointer(view control.View) {
 	if wasGrab && g.menuGrab != nil && g.menuGrab(true) {
 		outside = true
 	}
-	open, saw, activate, consumed := nextMenu(inputOpen, menuEvent{
-		Right:    inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonRight),
-		Left:     inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonLeft),
-		Escape:   inpututil.IsKeyJustPressed(ebiten.KeyEscape),
-		Outside:  outside,
-		Focused:  ebiten.IsFocused(),
-		SawFocus: g.menuSawFocus,
-		OnMenu:   g.lay.Menu.contains(cx, cy),
+	open, watch, activate, consumed := nextMenu(inputOpen, menuEvent{
+		Right:   inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonRight),
+		Left:    inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonLeft),
+		Escape:  inpututil.IsKeyJustPressed(ebiten.KeyEscape),
+		Outside: outside,
+		Focused: ebiten.IsFocused(),
+		Watch:   g.menuWatch,
+		OnMenu:  g.lay.Menu.contains(cx, cy),
+		Card:    !g.menu,
 	})
-	g.menuSawFocus = saw
+	g.menuWatch = watch
 	switch {
 	case activate && g.menu:
-		g.menu = false
 		g.activate(cy-g.lay.Menu.Y, view)
 	case activate:
 		g.chooseCard(cx-g.lay.Menu.X, cy-g.lay.Menu.Y, view)
@@ -419,7 +422,7 @@ func (g *game) pointer(view control.View) {
 		g.ctrl.SaveWindow(g.scr.stored(g.catX, g.catY))
 	} else if g.dragging && g.badgeShown(view) {
 		g.cards.show(cardOffer, true, false)
-		g.menuSawFocus = ebiten.IsFocused()
+		g.menuWatch = watchFrom(ebiten.IsFocused())
 	}
 	g.dragging = false
 	g.dragged = false
@@ -495,13 +498,19 @@ func (g *game) applyWindow() {
 	}
 }
 
+// activate runs the menu row at cy. Settings leave the menu open so they can
+// be changed again; every other row closes it.
 func (g *game) activate(cy int, view control.View) {
 	rows := menuRows(view)
 	idx := (cy - menuPad) / rowH
-	if idx < 0 || idx >= len(rows) {
+	if cy < menuPad || idx >= len(rows) {
 		return
 	}
-	switch rows[idx].id {
+	row := rows[idx]
+	if !row.setting {
+		g.menu = false
+	}
+	switch row.id {
 	case "access":
 		g.ctrl.RequestAccess()
 	case "pause":
@@ -524,7 +533,7 @@ func (g *game) activate(cy int, view control.View) {
 		g.runUpdateItem(view)
 	case "about":
 		g.cards.show(cardAbout, true, false)
-		g.menuSawFocus = ebiten.IsFocused()
+		g.menuWatch = watchFrom(ebiten.IsFocused())
 	case "quit":
 		g.ctrl.Quit()
 	}
@@ -535,8 +544,9 @@ func (g *game) Draw(screen *ebiten.Image) {
 	if g.hidden {
 		return
 	}
-	act := activity(view, ebiten.Tick())
-	frame := g.pet.Frame(act, ebiten.Tick())
+	tick := AnimTick(time.Since(g.shown))
+	act := activity(view, tick)
+	frame := g.pet.Frame(act, tick)
 	if frame != nil {
 		op := &ebiten.DrawImageOptions{}
 		fw := float64(frame.Bounds().Dx())
@@ -588,7 +598,7 @@ func activity(view control.View, tick int64) Activity {
 	if !view.LastNudge.IsZero() && time.Since(view.LastNudge) < 900*time.Millisecond {
 		return ActivityPaws
 	}
-	switch (tick / 12 / 3) % 5 {
+	switch (tick / AnimRate / 3) % 5 {
 	case 0, 1:
 		return ActivityIdle
 	case 2:
@@ -604,6 +614,8 @@ type menuRow struct {
 	id    string
 	label string
 	hot   bool
+	// setting rows change a setting in place and leave the menu open.
+	setting bool
 }
 
 func menuRows(view control.View) []menuRow {
@@ -622,13 +634,13 @@ func menuRows(view control.View) []menuRow {
 		return "[ ] "
 	}
 	rows := []menuRow{
-		{id: "pause", label: pause},
-		{id: "inhibit", label: mark(view.Inhibit) + "Keep awake"},
-		{id: "mouse", label: mark(view.Mouse) + "Mouse jiggle"},
-		{id: "shift", label: mark(view.Shift) + "Shift tap"},
-		{id: "switch", label: mark(view.Switch) + "Switch windows"},
-		{id: "interval", label: "Idle every " + control.IntervalLabel(view.Interval)},
-		{id: "duration", label: control.WatchLabel(view.Duration)},
+		{id: "pause", label: pause, setting: true},
+		{id: "inhibit", label: mark(view.Inhibit) + "Keep awake", setting: true},
+		{id: "mouse", label: mark(view.Mouse) + "Mouse jiggle", setting: true},
+		{id: "shift", label: mark(view.Shift) + "Shift tap", setting: true},
+		{id: "switch", label: mark(view.Switch) + "Switch windows", setting: true},
+		{id: "interval", label: control.IntervalLine(view.Interval), setting: true},
+		{id: "duration", label: control.WatchLabel(view.Duration), setting: true},
 		{id: "hide", label: hide},
 	}
 	if label, _ := control.UpdateItem(view.Update); label != "" {

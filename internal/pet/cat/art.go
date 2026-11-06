@@ -352,7 +352,8 @@ func darken(rows []string) []string {
 
 // sleepFrames is the cat curled up on its side with its tail wrapped round
 // the front and its head on its paws. Its back rises and falls, and a Z
-// drifts up from its head.
+// drifts up from its head. Each pose is held so one breath and one Z take
+// five seconds at six frames a second.
 func sleepFrames() []*image.RGBA {
 	body := []string{
 		"......KKKKKKKK..........",
@@ -402,9 +403,9 @@ func sleepFrames() []*image.RGBA {
 		{false, big, 26, 0},
 		{false, nil, 0, 0},
 	}
-	const ground = 27
-	frames := make([]*image.RGBA, len(steps))
-	for i, st := range steps {
+	const ground, held = 27, 5
+	var frames []*image.RGBA
+	for _, st := range steps {
 		back := body
 		if st.in {
 			back = breath
@@ -415,7 +416,7 @@ func sleepFrames() []*image.RGBA {
 		c.stamp(x, ground+1-len(tail), tail)
 		c.stamp(x, ground+1-len(head), head)
 		c.stamp(st.zx, st.zy, st.z)
-		frames[i] = c.image()
+		frames = append(frames, hold(c.image(), held)...)
 	}
 	return frames
 }

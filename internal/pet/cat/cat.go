@@ -28,7 +28,13 @@ func (c *Cat) Frame(activity pet.Activity, tick int64) *ebiten.Image {
 	if len(frames) == 0 {
 		frames = c.frames[pet.ActivityIdle]
 	}
-	return frames[(tick/2)%int64(len(frames))]
+	return frames[frameAt(tick, len(frames))]
+}
+
+// frameAt is the frame shown at tick in a loop of n frames: a new frame every
+// second tick, six a second.
+func frameAt(tick int64, n int) int {
+	return int((tick / 2) % int64(n))
 }
 
 func (c *Cat) load() {
