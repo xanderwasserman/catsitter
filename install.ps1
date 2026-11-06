@@ -158,13 +158,30 @@ function Wait-CatsitterExit {
     }
 }
 
+# Clear-CatsitterPath deletes a file or folder. Windows can keep a file
+# locked for a moment after the process using it has exited, so failed
+# attempts are retried until a deadline.
+function Clear-CatsitterPath {
+    param([Parameter(Mandatory = $true)][string]$Path)
+    $deadline = (Get-Date).AddSeconds(10)
+    $reason = 'it is still in use'
+    while (Test-Path -LiteralPath $Path) {
+        if ((Get-Date) -gt $deadline) {
+            Write-InstallFailure "could not remove ${Path}: $reason"
+        }
+        try {
+            Remove-Item -LiteralPath $Path -Recurse -Force
+        }
+        catch {
+            $reason = $_.Exception.Message
+            Start-Sleep -Milliseconds 250
+        }
+    }
+}
+
 function Clear-CatsitterInstall {
-    if (Test-Path -LiteralPath $shortcutPath) {
-        Remove-Item -LiteralPath $shortcutPath -Force
-    }
-    if (Test-Path -LiteralPath $installDir) {
-        Remove-Item -LiteralPath $installDir -Recurse -Force
-    }
+    Clear-CatsitterPath -Path $shortcutPath
+    Clear-CatsitterPath -Path $installDir
 }
 
 function Invoke-CatsitterLaunch {

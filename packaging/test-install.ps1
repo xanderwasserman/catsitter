@@ -69,6 +69,38 @@ function Publish-Release {
     Remove-Item -LiteralPath $stage -Recurse -Force
 }
 
+# Start-FileLock keeps Path open without delete sharing from another process
+# for Milliseconds, the way a virus scanner can hold a file that was just in
+# use. It returns once the file is open.
+function Start-FileLock {
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [Parameter(Mandatory = $true)][int]$Milliseconds
+    )
+    $ready = Join-Path $script:work ("lock-" + [guid]::NewGuid().ToString('n'))
+    $code = @"
+`$ErrorActionPreference = 'Stop'
+`$stream = [System.IO.File]::Open('$Path', [System.IO.FileMode]::Open, [System.IO.FileAccess]::Read, [System.IO.FileShare]::ReadWrite)
+Set-Content -LiteralPath '$ready' -Value 'locked'
+Start-Sleep -Milliseconds $Milliseconds
+`$stream.Dispose()
+"@
+    $encoded = [Convert]::ToBase64String([System.Text.Encoding]::Unicode.GetBytes($code))
+    $shell = (Get-Process -Id $PID).Path
+    $locker = Start-Process -FilePath $shell -ArgumentList @('-NoProfile', '-NonInteractive', '-EncodedCommand', $encoded) -PassThru -WindowStyle Hidden
+    $null = $locker.Handle
+    foreach ($try in 1..150) {
+        if (Test-Path -LiteralPath $ready) {
+            return $locker
+        }
+        if ($locker.HasExited) {
+            break
+        }
+        Start-Sleep -Milliseconds 100
+    }
+    throw "could not lock $Path"
+}
+
 try {
     $stub = Join-Path $root 'packaging\stub'
     $one = Join-Path $work 'catsitter-0.1.0.exe'
@@ -216,7 +248,12 @@ try {
         throw 'skip stopped the running Catsitter'
     }
 
+    # The binary stays locked for a moment after Catsitter stops.
+    $locker = Start-FileLock -Path $exe -Milliseconds 3000
     & $scriptPath -Uninstall
+    if (-not $locker.WaitForExit(10000) -or $locker.ExitCode -ne 0) {
+        throw 'the file lock did not release cleanly'
+    }
     if (Test-Path -LiteralPath $exe) {
         throw 'uninstall left the binary'
     }
@@ -249,7 +286,34 @@ try {
     if ($got -ne '0.2.0') {
         throw "local folder install returned $got"
     }
+
+    # A binary that stays locked makes uninstall fail and keeps it in place.
+    $hold = [System.IO.File]::Open($exe, [System.IO.FileMode]::Open, [System.IO.FileAccess]::Read, [System.IO.FileShare]::ReadWrite)
+    try {
+        $message = ''
+        try {
+            & $scriptPath -Uninstall
+        }
+        catch {
+            $message = $_.Exception.Message
+        }
+        if (-not $message) {
+            throw 'uninstall succeeded while the binary was locked'
+        }
+        if ($message -notlike 'catsitter install: could not remove*') {
+            throw "locked uninstall failed with: $message"
+        }
+        if (-not (Test-Path -LiteralPath $exe)) {
+            throw 'locked uninstall reported failure but removed the binary'
+        }
+    }
+    finally {
+        $hold.Dispose()
+    }
     & $scriptPath -Uninstall
+    if (Test-Path -LiteralPath $exe) {
+        throw 'uninstall after the lock was released left the binary'
+    }
 
     # The double-dash flag has to uninstall a fresh copy too.
     Set-Content -LiteralPath (Join-Path $serverRoot 'latest') -Value "v0.1.0`n" -Encoding ascii
