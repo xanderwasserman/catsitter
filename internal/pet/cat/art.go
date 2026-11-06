@@ -117,27 +117,62 @@ func runeColor(r rune) byte {
 // Hand-drawn sheets. Each row is 24 columns and is centered in the 32px frame.
 const spriteCols = 24
 
-func place(rows []string) *image.RGBA {
+// frontHead is the sitting cat's face without its eyes; frontCat stamps them on.
+var frontHead = []string{
+	".........KKKK..........",
+	".......KKPPPPKK........",
+	"......KPP....PPK.......",
+	".....KP..KOOOK..PK.....",
+	"....KK.KOOOOOOK.KK.....",
+	"...KOOOODDOOOODDOOOK...",
+	"..KOOOOOOOOOOOOOOOOOK..",
+	"..KOOOOOOOOOOOOOOOOOK..",
+	"..KOOOOOOOOOOOOOOOOOK..",
+	"..KOOOOOOOOOOOOOOOOOK..",
+	"..KOOOOOWWNNWWWOOOOOK..",
+	"...KOOOOOWWWWWOOOOOK...",
+	"....KKOOOWWWWWOOOKK....",
+}
+
+// Eyes are stamped over the face's fur, so . leaves the fur showing.
+var (
+	eyesOpen = []string{
+		".EEEE.",
+		"EWWBBE",
+		"EWBBHE",
+		".EEEE.",
+	}
+	eyesHalf = []string{
+		"......",
+		".KKKK.",
+		"KWBBHK",
+		".EEEE.",
+	}
+	eyesClosed = []string{
+		"......",
+		"......",
+		"K....K",
+		".KKKK.",
+	}
+)
+
+// frontCat draws the sitting cat with its face above body and the given eyes.
+func frontCat(body, eyes []string) *image.RGBA {
+	const eyeY, leftEyeX, rightEyeX = 6, 4, 13
+	rows := append(clone(frontHead), body...)
+	fixWidth(rows)
 	c := newCanvas()
-	c.stamp((frameW-spriteCols)/2, (frameH-len(rows))/2, rows)
+	x, y := (frameW-spriteCols)/2, (frameH-len(rows))/2
+	c.stamp(x, y, rows)
+	c.stamp(x+leftEyeX, y+eyeY, eyes)
+	c.stamp(x+rightEyeX, y+eyeY, eyes)
 	return c.image()
 }
 
+// idleFrames is the sitting cat looking out with big round eyes. It holds
+// still, twitches, then gives one slow blink, at six frames a second.
 func idleFrames() []*image.RGBA {
-	open := []string{
-		".........KKKK..........",
-		".......KKPPPPKK........",
-		"......KPP....PPK.......",
-		".....KP..KOOOK..PK.....",
-		"....KK.KOOOOOOK.KK.....",
-		"...KOOOODDOOOODDOOOK...",
-		"..KOOOOOOOOOOOOOOOOOK..",
-		"..KOOOEEHBOOEEHBOOOOK..",
-		"..KOOOEEBBOOEEBBOOOOK..",
-		"..KOOOOOOOOOOOOOOOOOK..",
-		"..KOOOOOWWNNWWWOOOOOK..",
-		"...KOOOOOWWWWWOOOOOK...",
-		"....KKOOOWWWWWOOOKK....",
+	body := []string{
 		"......KOOOLLLLOOOK.....",
 		".....KOODDLLLLDDOOK....",
 		"....KOOODLLLLLLLDOOOK..",
@@ -150,36 +185,23 @@ func idleFrames() []*image.RGBA {
 		".......KOOO..OOOOK.....",
 		"........KKK..KKKK......",
 	}
-	half := clone(open)
-	half[7] = "..KOOOOOOOOOOOOOOOOOK.."
-	half[8] = "..KOOOKKKKBBKKKKKBOOOK."
-	closed := clone(open)
-	closed[7] = "..KOOOOOOOOOOOOOOOOOK.."
-	closed[8] = "..KOOKKKKKKKKKKKKKKOOK."
-	tail := clone(open)
-	// The tail sits in the margin; nudge a stripe so the idle loop is visible
-	// even before the blink.
-	tail[5] = "...KOOOODDOOOOODDOOOK..."
-	tail[15] = "....KOOODDLLLLLDDOOOK.."
-	fixWidth(open, half, closed, tail)
-	return []*image.RGBA{place(open), place(half), place(closed), place(tail)}
+	twitch := clone(body)
+	twitch[2] = "....KOOODDLLLLLDDOOOK.."
+	open := frontCat(body, eyesOpen)
+	half := frontCat(body, eyesHalf)
+	closed := frontCat(body, eyesClosed)
+	return sequence(
+		hold(open, 9),
+		hold(frontCat(twitch, eyesOpen), 2),
+		hold(open, 9),
+		hold(half, 1),
+		hold(closed, 3),
+		hold(half, 2),
+	)
 }
 
 func sitFrames() []*image.RGBA {
 	calm := []string{
-		".........KKKK..........",
-		".......KKPPPPKK........",
-		"......KPP....PPK.......",
-		".....KP..KOOOK..PK.....",
-		"....KK.KOOOOOOK.KK.....",
-		"...KOOOOOOOOOOOOOOOK...",
-		"..KOOOOODDOOOODDOOOOK..",
-		"..KOOOEEHBOOEEHBOOOOK..",
-		"..KOOOEEBBOOEEBBOOOOK..",
-		"..KOOOOOOOOOOOOOOOOOK..",
-		"..KOOOOOWWNNWWWOOOOOK..",
-		"...KOOOOOWWWWWOOOOOK...",
-		"....KKOOOWWWWWOOOKK....",
 		"......KOOOLLLLOOOK.....",
 		".....KOOLLLLLLLLOOK....",
 		"....KOOLLLLLLLLLLOOOK..",
@@ -193,11 +215,27 @@ func sitFrames() []*image.RGBA {
 		"........KKK..KKKK......",
 	}
 	breathe := clone(calm)
-	breathe[16] = "...K.OLLLLLLLLLLLL.OOK"
-	breathe[17] = "...K.DLLLLLLLLLLLD.OOK"
-	breathe[18] = "...K.OLLLLLLLLLLLL.OOK"
-	fixWidth(calm, breathe)
-	return []*image.RGBA{place(calm), place(breathe)}
+	breathe[3] = "...K.OLLLLLLLLLLLL.OOK"
+	breathe[4] = "...K.DLLLLLLLLLLLD.OOK"
+	breathe[5] = "...K.OLLLLLLLLLLLL.OOK"
+	return []*image.RGBA{frontCat(calm, eyesOpen), frontCat(breathe, eyesOpen)}
+}
+
+// hold repeats a frame so it stays on screen for n frames.
+func hold(frame *image.RGBA, n int) []*image.RGBA {
+	out := make([]*image.RGBA, n)
+	for i := range out {
+		out[i] = frame
+	}
+	return out
+}
+
+func sequence(parts ...[]*image.RGBA) []*image.RGBA {
+	var out []*image.RGBA
+	for _, p := range parts {
+		out = append(out, p...)
+	}
+	return out
 }
 
 // walkFrames is a side view of the cat walking right: a stride, a passing
@@ -497,17 +535,29 @@ func Frames() map[string][]*image.RGBA {
 }
 
 // Sheet packs the animations into one sprite sheet, six frames per row.
+// A held frame is drawn once.
 func Sheet() *image.RGBA {
 	const cols = 6
 	order := []string{"idle", "walk", "sit", "sleep", "paws"}
 	all := Frames()
 	img := image.NewRGBA(image.Rect(0, 0, cols*frameW, len(order)*frameH))
 	for row, name := range order {
-		for col, frame := range all[name] {
+		for col, frame := range poses(all[name]) {
 			drawAt(img, frame, col*frameW, row*frameH)
 		}
 	}
 	return img
+}
+
+// poses drops repeats of the frame before, leaving each drawing once in order.
+func poses(frames []*image.RGBA) []*image.RGBA {
+	var out []*image.RGBA
+	for i, f := range frames {
+		if i == 0 || f != frames[i-1] {
+			out = append(out, f)
+		}
+	}
+	return out
 }
 
 func drawAt(dst *image.RGBA, src *image.RGBA, x, y int) {
