@@ -73,7 +73,7 @@ var Intervals = []time.Duration{
 	10 * time.Minute,
 }
 
-// Durations are the menu presets. Zero means until the user quits.
+// Durations are the menu presets. Zero means no time limit.
 var Durations = []time.Duration{
 	30 * time.Minute,
 	time.Hour,
@@ -111,10 +111,15 @@ func IntervalLabel(d time.Duration) string {
 	return fmt.Sprintf("%gs", d.Seconds())
 }
 
+// IntervalLine is the menu line for how long the user must be idle before a nudge.
+func IntervalLine(d time.Duration) string {
+	return "Nudge after " + IntervalLabel(d) + " idle"
+}
+
 // DurationLabel renders a short limit name.
 func DurationLabel(d time.Duration) string {
 	if d <= 0 {
-		return "Until I stop it"
+		return "No time limit"
 	}
 	if d%time.Hour == 0 {
 		return fmt.Sprintf("%dh", int(d/time.Hour))
@@ -125,12 +130,13 @@ func DurationLabel(d time.Duration) string {
 	return d.String()
 }
 
-// WatchLabel is the menu line for how long Catsitter keeps watch.
+// WatchLabel is the menu line for how long Catsitter keeps watch before it
+// pauses by itself.
 func WatchLabel(d time.Duration) string {
 	if d <= 0 {
-		return "Until I stop it"
+		return "Watch with no time limit"
 	}
-	return "For " + DurationLabel(d)
+	return "Watch " + DurationLabel(d) + ", then pause"
 }
 
 // UpdateAction is what the update menu item does when chosen.

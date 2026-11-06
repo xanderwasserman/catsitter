@@ -343,3 +343,70 @@ func TestInhibitFailureDoesNotStick(t *testing.T) {
 		t.Fatal("retry should acquire")
 	}
 }
+
+func TestResumeAfterExpiryStartsTheLimitOver(t *testing.T) {
+	clock := &fakeClock{t: time.Unix(0, 0)}
+	inh := &fakeInhibit{}
+	s := New(&fakeIdle{}, &fakeNudge{}, inh, clock, nil, nil)
+	st := baseSettings()
+	st.Mouse, st.Shift = false, false
+	st.Duration = time.Second
+	s.Update(st)
+	s.Tick()
+	clock.t = clock.t.Add(1100 * time.Millisecond)
+	s.Tick()
+	if !s.Expired() || inh.on {
+		t.Fatalf("expired=%v held=%v", s.Expired(), inh.on)
+	}
+
+	clock.t = clock.t.Add(time.Second)
+	s.Tick()
+	if inh.on {
+		t.Fatal("the inhibitor came back before a resume")
+	}
+
+	st.Paused = true
+	s.Update(st)
+	if !s.Expired() {
+		t.Fatal("pausing cleared the expiry")
+	}
+	clock.t = clock.t.Add(time.Minute)
+	s.Tick()
+
+	st.Paused = false
+	s.Update(st)
+	if s.Expired() {
+		t.Fatal("resuming kept the old expiry")
+	}
+	clock.t = clock.t.Add(900 * time.Millisecond)
+	s.Tick()
+	if s.Expired() || !inh.on {
+		t.Fatalf("fresh limit: expired=%v held=%v", s.Expired(), inh.on)
+	}
+	clock.t = clock.t.Add(200 * time.Millisecond)
+	s.Tick()
+	if !s.Expired() {
+		t.Fatal("the fresh limit did not run out")
+	}
+}
+
+func TestResumeBeforeExpiryKeepsTheTimeUsed(t *testing.T) {
+	clock := &fakeClock{t: time.Unix(0, 0)}
+	s := New(&fakeIdle{}, &fakeNudge{}, &fakeInhibit{}, clock, nil, nil)
+	st := baseSettings()
+	st.Mouse, st.Shift = false, false
+	st.Duration = time.Second
+	s.Update(st)
+	s.Tick()
+	clock.t = clock.t.Add(700 * time.Millisecond)
+	s.Tick()
+	st.Paused = true
+	s.Update(st)
+	st.Paused = false
+	s.Update(st)
+	clock.t = clock.t.Add(400 * time.Millisecond)
+	s.Tick()
+	if !s.Expired() {
+		t.Fatal("a pause before the limit started it over")
+	}
+}

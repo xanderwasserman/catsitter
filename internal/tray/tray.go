@@ -83,12 +83,13 @@ func (h *Handle) ready() {
 	shift := systray.AddMenuItemCheckbox("Shift tap", "Tap Shift", true)
 	sw := systray.AddMenuItemCheckbox("Switch windows", "Alt or Cmd+Tab", false)
 	systray.AddSeparator()
-	interval := systray.AddMenuItem("Idle every", "How long to wait")
+	start := h.ctrl.View()
+	interval := systray.AddMenuItem(control.IntervalLine(start.Interval), "How long you must be idle before a nudge")
 	var intervalItems []*systray.MenuItem
 	for _, d := range control.Intervals {
 		intervalItems = append(intervalItems, interval.AddSubMenuItemCheckbox(control.IntervalLabel(d), "", false))
 	}
-	duration := systray.AddMenuItem("For", "How long to keep watch")
+	duration := systray.AddMenuItem(control.WatchLabel(start.Duration), "How long to keep watch before pausing")
 	var durationItems []*systray.MenuItem
 	for _, d := range control.Durations {
 		durationItems = append(durationItems, duration.AddSubMenuItemCheckbox(control.DurationLabel(d), "", false))
@@ -99,7 +100,7 @@ func (h *Handle) ready() {
 	systray.AddSeparator()
 	upd := systray.AddMenuItem("Check for updates", "Look for a new Catsitter")
 	upd.Hide()
-	about := systray.AddMenuItem(control.VersionLine(h.ctrl.View().Update.Version), "About Catsitter")
+	about := systray.AddMenuItem(control.VersionLine(start.Update.Version), "About Catsitter")
 	systray.AddSeparator()
 	quit := systray.AddMenuItem("Quit", "Quit Catsitter")
 
@@ -164,7 +165,7 @@ func (h *Handle) ready() {
 				} else {
 					hide.SetTitle("Hide cat")
 				}
-				interval.SetTitle("Idle every " + control.IntervalLabel(view.Interval))
+				interval.SetTitle(control.IntervalLine(view.Interval))
 				for i, item := range intervalItems {
 					setCheck(item, control.Intervals[i] == view.Interval)
 				}

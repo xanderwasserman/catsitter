@@ -35,7 +35,7 @@ func TestFramesAreCats(t *testing.T) {
 	if sameImage(all["walk"][0], all["walk"][1]) {
 		t.Fatal("walk frames do not move")
 	}
-	if sameImage(all["sleep"][0], all["sleep"][2]) {
+	if sleep := poses(all["sleep"]); sameImage(sleep[0], sleep[2]) {
 		t.Fatal("sleep frames do not change")
 	}
 }
@@ -76,6 +76,31 @@ func TestBlinkIsSlowAndRare(t *testing.T) {
 	}
 	if longestShut < fps/2 {
 		t.Fatalf("eyes shut for %d frames, want at least %d", longestShut, fps/2)
+	}
+}
+
+// TestSleepIsUnhurried plays sleep at the app's six frames a second: one
+// breath and one drifting Z take at least four seconds, and every pose stays
+// up for more than half a second, so the loop reads as slow breathing.
+func TestSleepIsUnhurried(t *testing.T) {
+	const fps = 6
+	sleep := Frames()["sleep"]
+	if len(sleep) < 4*fps {
+		t.Fatalf("sleep loop is %d frames (%.1fs), want at least %d", len(sleep), float64(len(sleep))/fps, 4*fps)
+	}
+	if n := len(poses(sleep)); n != 6 {
+		t.Fatalf("sleep has %d poses, want the 6 drawings", n)
+	}
+	run := 0
+	for i, f := range sleep {
+		run++
+		if next := sleep[(i+1)%len(sleep)]; next == f {
+			continue
+		}
+		if run <= fps/2 {
+			t.Fatalf("sleep pose ending at frame %d is up for %d frames, want more than %d", i, run, fps/2)
+		}
+		run = 0
 	}
 }
 

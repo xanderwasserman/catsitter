@@ -12,7 +12,9 @@ type menuEvent struct {
 }
 
 // nextMenu reports the menu after one input.
-// activate is true when a menu row was chosen.
+// activate is true when a menu row was chosen. The menu stays open for it;
+// the chosen row decides whether to close it (see menuRow.setting).
+// A click anywhere else, Escape, a right click or losing focus closes it.
 // consumed is true when the click should not also drag the cat.
 func nextMenu(open bool, ev menuEvent) (openOut bool, sawFocus bool, activate bool, consumed bool) {
 	if !open {
@@ -27,8 +29,11 @@ func nextMenu(open bool, ev menuEvent) (openOut bool, sawFocus bool, activate bo
 	if ev.Right {
 		return false, false, false, true
 	}
+	if ev.Left && ev.OnMenu {
+		return true, ev.SawFocus || ev.Focused, true, true
+	}
 	if ev.Left {
-		return false, false, ev.OnMenu, true
+		return false, false, false, true
 	}
 	saw := ev.SawFocus || ev.Focused
 	return true, saw, false, false

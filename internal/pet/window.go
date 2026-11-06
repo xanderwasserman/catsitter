@@ -363,7 +363,6 @@ func (g *game) pointer(view control.View) {
 	g.menuSawFocus = saw
 	switch {
 	case activate && g.menu:
-		g.menu = false
 		g.activate(cy-g.lay.Menu.Y, view)
 	case activate:
 		g.chooseCard(cx-g.lay.Menu.X, cy-g.lay.Menu.Y, view)
@@ -495,13 +494,19 @@ func (g *game) applyWindow() {
 	}
 }
 
+// activate runs the menu row at cy. Settings leave the menu open so they can
+// be changed again; every other row closes it.
 func (g *game) activate(cy int, view control.View) {
 	rows := menuRows(view)
 	idx := (cy - menuPad) / rowH
-	if idx < 0 || idx >= len(rows) {
+	if cy < menuPad || idx >= len(rows) {
 		return
 	}
-	switch rows[idx].id {
+	row := rows[idx]
+	if !row.setting {
+		g.menu = false
+	}
+	switch row.id {
 	case "access":
 		g.ctrl.RequestAccess()
 	case "pause":
@@ -604,6 +609,8 @@ type menuRow struct {
 	id    string
 	label string
 	hot   bool
+	// setting rows change a setting in place and leave the menu open.
+	setting bool
 }
 
 func menuRows(view control.View) []menuRow {
@@ -622,13 +629,13 @@ func menuRows(view control.View) []menuRow {
 		return "[ ] "
 	}
 	rows := []menuRow{
-		{id: "pause", label: pause},
-		{id: "inhibit", label: mark(view.Inhibit) + "Keep awake"},
-		{id: "mouse", label: mark(view.Mouse) + "Mouse jiggle"},
-		{id: "shift", label: mark(view.Shift) + "Shift tap"},
-		{id: "switch", label: mark(view.Switch) + "Switch windows"},
-		{id: "interval", label: "Idle every " + control.IntervalLabel(view.Interval)},
-		{id: "duration", label: control.WatchLabel(view.Duration)},
+		{id: "pause", label: pause, setting: true},
+		{id: "inhibit", label: mark(view.Inhibit) + "Keep awake", setting: true},
+		{id: "mouse", label: mark(view.Mouse) + "Mouse jiggle", setting: true},
+		{id: "shift", label: mark(view.Shift) + "Shift tap", setting: true},
+		{id: "switch", label: mark(view.Switch) + "Switch windows", setting: true},
+		{id: "interval", label: control.IntervalLine(view.Interval), setting: true},
+		{id: "duration", label: control.WatchLabel(view.Duration), setting: true},
 		{id: "hide", label: hide},
 	}
 	if label, _ := control.UpdateItem(view.Update); label != "" {
