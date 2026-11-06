@@ -109,3 +109,27 @@ func writePNG(t *testing.T, path string, img image.Image) {
 		t.Fatal(err)
 	}
 }
+
+func TestPosesShareTheGround(t *testing.T) {
+	all := Frames()
+	ground := lowestRow(all["idle"][0])
+	for name, frames := range all {
+		for i, f := range frames {
+			if got := lowestRow(f); got != ground {
+				t.Fatalf("%s frame %d stands on row %d, idle on %d", name, i, got, ground)
+			}
+		}
+	}
+}
+
+func lowestRow(img image.Image) int {
+	b := img.Bounds()
+	for y := b.Max.Y - 1; y >= b.Min.Y; y-- {
+		for x := b.Min.X; x < b.Max.X; x++ {
+			if _, _, _, a := img.At(x, y).RGBA(); a > 0 {
+				return y
+			}
+		}
+	}
+	return -1
+}

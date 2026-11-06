@@ -56,6 +56,8 @@ archives:
       - README.md
       - src: packaging/icon.png
         dst: icon.png
+      - src: packaging/icon.ico
+        dst: icon.ico
   - id: catsitter-darwin
     ids:
       - catsitter-darwin

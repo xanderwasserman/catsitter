@@ -86,6 +86,7 @@ if (-not [string]::IsNullOrEmpty($env:CATSITTER_INSTALL_FROM)) {
 Remove-Item Env:CATSITTER_INSTALL_FROM -ErrorAction SilentlyContinue
 $installDir = Join-Path $env:LOCALAPPDATA 'Programs\Catsitter'
 $installExe = Join-Path $installDir 'catsitter.exe'
+$installIcon = Join-Path $installDir 'catsitter.ico'
 $shortcutPath = Join-Path $env:APPDATA 'Microsoft\Windows\Start Menu\Programs\Catsitter.lnk'
 
 # Save-CatsitterFile copies a release file from a URL or a local folder.
@@ -277,6 +278,10 @@ try {
     $staged = Join-Path $installDir 'catsitter.exe.new'
     Copy-Item -LiteralPath $source -Destination $staged -Force
     Move-Item -LiteralPath $staged -Destination $installExe -Force
+    $iconSource = Join-Path $extract 'icon.ico'
+    if (Test-Path -LiteralPath $iconSource) {
+        Copy-Item -LiteralPath $iconSource -Destination $installIcon -Force
+    }
 
     $menuDir = Split-Path -Parent $shortcutPath
     New-Item -ItemType Directory -Force -Path $menuDir | Out-Null
@@ -285,6 +290,9 @@ try {
     $shortcut.TargetPath = $installExe
     $shortcut.WorkingDirectory = $installDir
     $shortcut.Description = 'A little cat that keeps the computer awake'
+    if (Test-Path -LiteralPath $installIcon) {
+        $shortcut.IconLocation = "$installIcon,0"
+    }
     $shortcut.Save()
 
     Write-InstallMessage "Installed Catsitter $ver to $installDir"
