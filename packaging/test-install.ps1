@@ -55,13 +55,15 @@ function Publish-Release {
     $stage = Join-Path $script:work "stage-$Version"
     New-Item -ItemType Directory -Force -Path $dir, $stage | Out-Null
     $stagedExe = Join-Path $stage 'catsitter.exe'
+    $stagedIcon = Join-Path $stage 'icon.ico'
     Copy-Item -LiteralPath $Binary -Destination $stagedExe -Force
+    Copy-Item -LiteralPath (Join-Path $script:root 'packaging\icon.ico') -Destination $stagedIcon -Force
     $asset = "catsitter_${Version}_windows_$($script:arch).zip"
     $zip = Join-Path $dir $asset
     if (Test-Path -LiteralPath $zip) {
         Remove-Item -LiteralPath $zip -Force
     }
-    Compress-Archive -Path $stagedExe -DestinationPath $zip
+    Compress-Archive -Path $stagedExe, $stagedIcon -DestinationPath $zip
     $hash = (Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash.ToLowerInvariant()
     Set-Content -LiteralPath (Join-Path $dir 'checksums.txt') -Value "$hash  $asset" -Encoding ascii
     Remove-Item -LiteralPath $stage -Recurse -Force
@@ -154,6 +156,13 @@ try {
     if ($link.TargetPath -ne $exe) {
         throw "shortcut target is $($link.TargetPath)"
     }
+    $icon = Join-Path $installDir 'catsitter.ico'
+    if (-not (Test-Path -LiteralPath $icon)) {
+        throw 'icon was not installed'
+    }
+    if ($link.IconLocation -ne "$icon,0") {
+        throw "shortcut icon is $($link.IconLocation)"
+    }
 
     Set-Content -LiteralPath (Join-Path $serverRoot 'latest') -Value "v0.2.0`n" -Encoding ascii
     & $scriptPath -Version '0.1.0'
@@ -210,6 +219,9 @@ try {
     & $scriptPath -Uninstall
     if (Test-Path -LiteralPath $exe) {
         throw 'uninstall left the binary'
+    }
+    if (Test-Path -LiteralPath $icon) {
+        throw 'uninstall left the icon'
     }
     if (Test-Path -LiteralPath $shortcut) {
         throw 'uninstall left the shortcut'
