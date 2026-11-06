@@ -4,6 +4,7 @@ package cat
 import (
 	"image"
 	"image/color"
+	"strings"
 )
 
 const (
@@ -199,48 +200,116 @@ func sitFrames() []*image.RGBA {
 	return []*image.RGBA{place(calm), place(breathe)}
 }
 
+// walkFrames is a side view of the cat walking right: a stride, a passing
+// step, the other stride and the other passing step. The far legs are
+// stripe-dark and sit a little ahead of the near ones, and the body rises
+// a pixel on each passing step. The feet stay on the other poses' ground.
 func walkFrames() []*image.RGBA {
-	a := []string{
-		"...........KKKKK.......",
-		".........KKOOOOKK......",
-		"........KOODDOOOKK.....",
-		".......KOODOOOOOOOK....",
-		".......KOOOEEHBOOOK....",
-		".......KOOOEEBBOOK.....",
-		".......KOOOOONNOOK.....",
-		".......KOOOWWWWOK......",
-		"......KOOOWWWWOK.......",
-		".....KOOLLLLLLOK.......",
-		"....KOOLLLLLLLOK.......",
-		"...KOODLLLLLLLOOK......",
-		"..KOODDLLLLLLLOOK......",
-		"..KOODLLLLLLLOOK.......",
-		"...KOOOLLLLOOOK........",
-		"....KOOOKKOOOK.........",
-		"....KOOK..KOOK.........",
-		"....KK....K.KK.........",
-		"..............KK.......",
-		".............KOOOK.....",
-		"............KOOOOOK....",
-		".............KKKKKK....",
-		".......................",
-		".......................",
+	const rows, farShift = 24, 2
+	head := []string{
+		".............KK....KK...",
+		"............KPPK..KPPK..",
+		"............KPPOKKOPPK..",
+		"...........KOOOOOOOOOOK.",
+		"...........KOODDOOOOOOK.",
+		"...........KOOOOOOEHBOK.",
+		"...........KOOOOOOEBBOOK",
+		"...........KOOOOOOOOOWNK",
+		"...........KOOOOOOOWWWK.",
+		"............KOOOOWWWWK..",
+		"..............OLLLLWK...",
+		"..................KK....",
 	}
-	b := clone(a)
-	b[15] = "....KOKK..KKOK........."
-	b[16] = "....KK.K..K.KK........."
-	b[17] = "......K....K..........."
-	c := clone(a)
-	c[15] = ".....KOOKKOOOK........."
-	c[16] = "....KK.KOOK..KK........"
-	c[17] = "....K...KK............."
-	d := clone(a)
-	d[15] = "....KKOK..KOKK........."
-	d[16] = "....K.KK..KK.K........."
-	d[17] = "....K..........K......."
-	d[4] = ".......KOOOEEHBOOK....."
-	fixWidth(a, b, c, d)
-	return []*image.RGBA{place(a), place(b), place(c), place(d)}
+	body := []string{
+		"....KKKKKKKKKK..........",
+		"...KOODOOODOOOKK........",
+		"..KOOODOOODOOOOOK.......",
+		"..KOOOOOOOOOOOOOOK......",
+		"..KOOOOOOOOOOOOOLK......",
+		"..KOOOLLLLLLLLLLLK......",
+		"...KOLLLLLLLLLLLK.......",
+		"....KKKKKKKKKKKK........",
+	}
+	tails := [][]string{
+		{".KK.", "KOOK", "KODK", "KOOK", ".KOK", ".KDOK", "..KOOK", "...KOK"},
+		{"..KK", ".KOOK", ".KODK", ".KOOK", ".KOK", ".KDOK", "..KOOK", "...KOK"},
+	}
+	spread := []string{
+		"...KOOK.......KOOK......",
+		"..KOOK.........KOOK.....",
+		"..KOOK.........KOOK.....",
+		".KOOK...........KOOK....",
+		".KOOK...........KOOK....",
+		"KOOOK...........KOOOK...",
+		"KKKK.............KKKK...",
+	}
+	under := []string{
+		"......KOOK...KOOK.......",
+		"......KOOK...KOOK.......",
+		"......KOOK...KOOK.......",
+		"......KOOK...KOOK.......",
+		"......KOOK...KOOK.......",
+		"......KOOOK..KOOOK......",
+		"......KKKK...KKKK.......",
+	}
+	hindUp := []string{
+		"....KOOK.....KOOK.......",
+		"....KOOK.....KOOK.......",
+		"...KOOK......KOOK.......",
+		"...KOOOK.....KOOK.......",
+		"....KKKK.....KOOK.......",
+		".............KOOOK......",
+		".............KKKK.......",
+	}
+	foreUp := []string{
+		".....KOOK....KOOK.......",
+		".....KOOK....KOOK.......",
+		".....KOOK.....KOOK......",
+		".....KOOK.....KOOOK.....",
+		".....KOOK......KKKK.....",
+		".....KOOOK..............",
+		".....KKKK...............",
+	}
+	type pose struct {
+		near, far  []string
+		rise, tail int
+	}
+	poses := []pose{
+		{spread, darken(under), 0, 0},
+		{hindUp, darken(under), 1, 1},
+		{under, darken(spread), 0, 0},
+		{under, darken(foreUp), 1, 1},
+	}
+	frames := make([]*image.RGBA, len(poses))
+	for i, p := range poses {
+		c := newCanvas()
+		x, y := (frameW-spriteCols)/2, (frameH-rows)/2-p.rise
+		c.stamp(x+farShift, y+17, stretch(p.far, p.rise))
+		c.stamp(x, y+3, tails[p.tail])
+		c.stamp(x, y+10, body)
+		c.stamp(x, y+17, stretch(p.near, p.rise))
+		c.stamp(x, y+3, head)
+		frames[i] = c.image()
+	}
+	return frames
+}
+
+// stretch lengthens legs at the hip so they still meet a raised body.
+func stretch(rows []string, by int) []string {
+	out := make([]string, 0, len(rows)+by)
+	for i := 0; i < by; i++ {
+		out = append(out, rows[0])
+	}
+	return append(out, rows...)
+}
+
+// darken redraws fur as stripe so a leg reads as the far one.
+func darken(rows []string) []string {
+	out := make([]string, len(rows))
+	for i, row := range rows {
+		out[i] = strings.ReplaceAll(row, "O", "D")
+	}
+	return out
 }
 
 func sleepFrames() []*image.RGBA {
