@@ -98,3 +98,25 @@ func TestVersionFlag(t *testing.T) {
 		t.Fatal("version not set")
 	}
 }
+
+func TestUpdateFlags(t *testing.T) {
+	if !Defaults().CheckUpdates {
+		t.Fatal("automatic checks are on by default")
+	}
+	f, err := ParseFlags([]string{"catsitter", "--no-update-check"}, &bytes.Buffer{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := f.Apply(Defaults())
+	if err != nil || cfg.CheckUpdates {
+		t.Fatalf("--no-update-check: %+v %v", cfg, err)
+	}
+	f, err = ParseFlags([]string{"catsitter", "--check-update"}, &bytes.Buffer{})
+	if err != nil || !f.CheckUpdate || f.Update {
+		t.Fatalf("--check-update: %+v %v", f, err)
+	}
+	f, err = ParseFlags([]string{"catsitter", "--update"}, &bytes.Buffer{})
+	if err != nil || !f.Update {
+		t.Fatalf("--update: %+v %v", f, err)
+	}
+}

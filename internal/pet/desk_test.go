@@ -78,6 +78,10 @@ func (c *fakeCtrl) SetDuration(time.Duration) {}
 func (c *fakeCtrl) ToggleHidden()             {}
 func (c *fakeCtrl) BringBack()                {}
 func (c *fakeCtrl) RequestAccess()            {}
+func (c *fakeCtrl) CheckForUpdates()          {}
+func (c *fakeCtrl) InstallUpdate()            {}
+func (c *fakeCtrl) SetAutoUpdate(bool)        {}
+func (c *fakeCtrl) ShowAbout()                {}
 func (c *fakeCtrl) Quit()                     {}
 func (c *fakeCtrl) SaveWindow(x, y int) {
 	c.view.WindowX, c.view.WindowY, c.view.WindowSet = x, y, true
@@ -162,11 +166,11 @@ func TestHideAndShowReturnToTheSameSpot(t *testing.T) {
 	g.scale = g.scr.scale()
 	g.catX, g.catY, _ = g.scr.position()
 
-	g.syncHidden(control.View{Hidden: true})
+	g.syncHidden(true)
 	if d.scale() != 1.5 {
 		t.Fatalf("parked window should pick up the laptop's scale, got %v", d.scale())
 	}
-	g.syncHidden(control.View{Hidden: false})
+	g.syncHidden(false)
 	for range 3 {
 		frame(g)
 	}

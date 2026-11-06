@@ -3,6 +3,7 @@ package pet
 import (
 	"image/color"
 	"log"
+	"runtime"
 	"time"
 
 	"github.com/hajimehoshi/ebiten/v2"
@@ -13,6 +14,7 @@ import (
 	"github.com/xanderwasserman/catsitter/internal/control"
 	"github.com/xanderwasserman/catsitter/internal/platform"
 	"github.com/xanderwasserman/catsitter/internal/tray"
+	"github.com/xanderwasserman/catsitter/internal/update"
 )
 
 const (
@@ -25,8 +27,9 @@ const (
 type Desktop struct {
 	Pump    func()
 	Overlay func() error
-	// MenuGrab takes keyboard and pointer input while the menu is open and
-	// reports a press outside the window or Escape. Nil where the window
+	// MenuGrab takes keyboard and pointer input while the menu or a card
+	// opened from it is up, and reports a press outside the window or
+	// Escape. Nil where the window
 	// already receives those events.
 	MenuGrab func(open bool) bool
 	// Pointer returns the pointer in window-position units.
@@ -66,13 +69,16 @@ func Run(p Pet, ctrl control.Controller, bar *tray.Handle, desk Desktop) error {
 		X11ClassName:      platform.OverlayTitle,
 		X11InstanceName:   "catsitter",
 	}
+	pixel := ebiten.NewImage(1, 1)
 	return ebiten.RunGameWithOptions(&game{
 		pet:          p,
 		ctrl:         ctrl,
 		tray:         bar,
 		catW:         catW,
 		catH:         catH,
-		pixel:        ebiten.NewImage(1, 1),
+		pixel:        pixel,
+		paint:        newPainter(pixel),
+		goos:         runtime.GOOS,
 		pump:         desk.Pump,
 		overlay:      desk.Overlay,
 		menuGrab:     desk.MenuGrab,
@@ -91,6 +97,8 @@ type game struct {
 	catH int
 
 	pixel        *ebiten.Image
+	paint        *painter
+	goos         string
 	pump         func()
 	overlay      func() error
 	menuGrab     func(open bool) bool
@@ -116,6 +124,9 @@ type game struct {
 	grab           grab
 	scale          float64
 	recall         uint64
+	cards          cardState
+	// drawnUpdate is the update row's action as last drawn.
+	drawnUpdate control.UpdateAction
 }
 
 func (g *game) Layout(outsideWidth, outsideHeight int) (int, int) {
@@ -123,7 +134,7 @@ func (g *game) Layout(outsideWidth, outsideHeight int) (int, int) {
 }
 
 func (g *game) screenSize() (int, int) {
-	if g.menu && g.lay.Window.W > 0 && g.lay.Window.H > 0 {
+	if g.panelShown() && g.lay.Window.W > 0 && g.lay.Window.H > 0 {
 		return g.lay.Window.W, g.lay.Window.H
 	}
 	return g.catW, g.catH
@@ -155,17 +166,18 @@ func (g *game) Update() error {
 		}
 		g.placed = true
 	}
-	wasMenu := g.menu
-	g.syncHidden(view)
+	wasGrab := g.grabbing()
+	g.syncUpdates(view)
+	g.syncHidden(view.Hidden && !g.cards.peek)
 	if g.hidden {
 		g.syncMenuGrab()
-		if wasMenu {
+		if wasGrab {
 			g.handBack()
 		}
 		ebiten.SetTPS(2)
 		return nil
 	}
-	if g.menu {
+	if g.panelShown() {
 		ebiten.SetTPS(60)
 	} else {
 		ebiten.SetTPS(12)
@@ -173,7 +185,7 @@ func (g *game) Update() error {
 	g.followScale()
 	if view.Recall != g.recall {
 		g.recall = view.Recall
-		g.bringBack(wasMenu)
+		g.bringBack(wasGrab)
 	}
 	g.pointer(view)
 	g.applyWindow()
@@ -223,15 +235,16 @@ func (g *game) moveAndSave(x, y int) {
 	g.followScale()
 }
 
-// bringBack answers the tray's recall: it closes the menu, ends any drag and
-// puts the cat at its default spot on the monitor with the pointer.
-func (g *game) bringBack(wasMenu bool) {
+// bringBack answers the tray's recall: it closes the menu and any card, ends
+// any drag and puts the cat at its default spot on the monitor with the pointer.
+func (g *game) bringBack(wasGrab bool) {
 	g.menu = false
+	g.cards.close()
 	g.dragging = false
 	g.dragged = false
 	g.grab = grab{}
 	g.syncMenuGrab()
-	if wasMenu {
+	if wasGrab {
 		g.handBack()
 	}
 	area, ok := g.homeArea()
@@ -257,7 +270,7 @@ func (g *game) followScale() {
 	if old <= 0 || s <= 0 || !g.haveCat || g.hidden {
 		return
 	}
-	if !g.menu && !g.grab.on {
+	if !g.panelShown() && !g.grab.on {
 		if x, y, ok := g.scr.position(); ok {
 			g.catX, g.catY = x, y
 			return
@@ -274,7 +287,7 @@ func rescale(v int, from, to float64) int {
 // keepOnScreen is the safety net: a cat that shows on no monitor is moved
 // onto the nearest one and that position is saved.
 func (g *game) keepOnScreen() {
-	if !g.haveCat || g.hidden || g.menu || g.grab.on {
+	if !g.haveCat || g.hidden || g.panelShown() || g.grab.on {
 		return
 	}
 	x, y, moved := rescue(box{g.catX, g.catY, g.catW, g.catH}, g.scr.areas(), g.scr.need())
@@ -286,13 +299,14 @@ func (g *game) keepOnScreen() {
 	g.moveAndSave(x, y)
 }
 
-func (g *game) syncHidden(view control.View) {
-	if view.Hidden == g.hidden {
+func (g *game) syncHidden(hidden bool) {
+	if hidden == g.hidden {
 		return
 	}
-	if view.Hidden {
+	if hidden {
 		g.savedX, g.savedY = g.scr.stored(g.catX, g.catY)
 		g.menu = false
+		g.cards.close()
 		g.dragging = false
 		g.grab = grab{}
 		g.scr.move(parkSpot(g.scr.areas()))
@@ -331,11 +345,13 @@ func (g *game) keepOutOfSwitcher() {
 
 func (g *game) pointer(view control.View) {
 	cx, cy := ebiten.CursorPosition()
+	wasGrab := g.grabbing()
+	inputOpen := g.inputOpen(view)
 	outside := false
-	if g.menu && g.menuGrab != nil && g.menuGrab(true) {
+	if wasGrab && g.menuGrab != nil && g.menuGrab(true) {
 		outside = true
 	}
-	open, saw, activate, consumed := nextMenu(g.menu, menuEvent{
+	open, saw, activate, consumed := nextMenu(inputOpen, menuEvent{
 		Right:    inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonRight),
 		Left:     inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonLeft),
 		Escape:   inpututil.IsKeyJustPressed(ebiten.KeyEscape),
@@ -344,23 +360,37 @@ func (g *game) pointer(view control.View) {
 		SawFocus: g.menuSawFocus,
 		OnMenu:   g.lay.Menu.contains(cx, cy),
 	})
-	if activate {
-		g.activate(cy-g.lay.Menu.Y, view)
-	}
-	closing := g.menu && !open
-	g.menu = open
 	g.menuSawFocus = saw
+	switch {
+	case activate && g.menu:
+		g.menu = false
+		g.activate(cy-g.lay.Menu.Y, view)
+	case activate:
+		g.chooseCard(cx-g.lay.Menu.X, cy-g.lay.Menu.Y, view)
+	case !inputOpen && open:
+		g.menu = true
+	case inputOpen && !open && g.menu:
+		g.menu = false
+	case inputOpen && !open:
+		g.cards.close()
+	}
+	closing := wasGrab && !g.grabbing()
 	g.syncMenuGrab()
 	if closing {
 		g.handBack()
 	}
 	px, py, pressed, held := g.readPress()
-	if g.menu || closing {
+	if g.inputOpen(view) || closing {
 		pressed = false
 		held = false
 	}
-	if consumed {
+	// A panel widens the window, so a press offset would no longer match the cat.
+	if consumed || g.panelShown() {
+		if g.dragging && g.dragged {
+			g.ctrl.SaveWindow(g.scr.stored(g.catX, g.catY))
+		}
 		g.dragging = false
+		g.dragged = false
 		g.grab = grab{}
 		return
 	}
@@ -387,6 +417,9 @@ func (g *game) pointer(view control.View) {
 	}
 	if g.dragging && g.dragged {
 		g.ctrl.SaveWindow(g.scr.stored(g.catX, g.catY))
+	} else if g.dragging && g.badgeShown(view) {
+		g.cards.show(cardOffer, true, false)
+		g.menuSawFocus = ebiten.IsFocused()
 	}
 	g.dragging = false
 	g.dragged = false
@@ -442,19 +475,16 @@ func (g *game) syncMenuGrab() {
 	if g.menuGrab == nil {
 		return
 	}
-	g.menuGrab(g.menu)
+	g.menuGrab(g.grabbing())
 }
 
 func (g *game) applyWindow() {
 	if !g.haveCat || g.hidden {
 		return
 	}
-	menuH := 0
-	if g.menu {
-		menuH = menuPad*2 + len(menuRows(g.ctrl.View()))*rowH
-	}
+	panelW, panelH := g.panelSize(g.ctrl.View())
 	area, _ := nearestArea(g.scr.areas(), g.catX+g.catW/2, g.catY+g.catH/2)
-	g.lay = placePet(g.menu, g.catX, g.catY, g.catW, g.catH, menuW, menuH, area)
+	g.lay = placePet(g.panelShown(), g.catX, g.catY, g.catW, g.catH, panelW, panelH, area)
 	wx, wy, ok := g.scr.position()
 	if !ok || wx != g.lay.Window.X || wy != g.lay.Window.Y {
 		g.scr.move(g.lay.Window.X, g.lay.Window.Y)
@@ -490,6 +520,11 @@ func (g *game) activate(cy int, view control.View) {
 		g.ctrl.SetDuration(control.NextDuration(view.Duration))
 	case "hide":
 		g.ctrl.ToggleHidden()
+	case "update":
+		g.runUpdateItem(view)
+	case "about":
+		g.cards.show(cardAbout, true, false)
+		g.menuSawFocus = ebiten.IsFocused()
 	case "quit":
 		g.ctrl.Quit()
 	}
@@ -497,7 +532,7 @@ func (g *game) activate(cy int, view control.View) {
 
 func (g *game) Draw(screen *ebiten.Image) {
 	view := g.ctrl.View()
-	if view.Hidden {
+	if g.hidden {
 		return
 	}
 	act := activity(view, ebiten.Tick())
@@ -512,6 +547,17 @@ func (g *game) Draw(screen *ebiten.Image) {
 		op.Filter = ebiten.FilterNearest
 		screen.DrawImage(frame, op)
 	}
+	if !g.menu && g.cards.kind != cardNone && g.lay.Menu.W > 0 {
+		cx, cy := ebiten.CursorPosition()
+		tailLeft := g.lay.Menu.X > g.lay.Cat.X
+		tailY := g.lay.Cat.Y + g.catH/3 - g.lay.Menu.Y
+		g.paint.card(screen, g.currentCard(view), g.lay.Menu, tailLeft, tailY, cx, cy)
+		return
+	}
+	if !g.menu && g.badgeShown(view) {
+		bw := len(badge[0]) * badgeScale
+		g.paint.badge(screen, g.lay.Cat.X+g.catW-bw-4, g.lay.Cat.Y+6)
+	}
 	if !g.menu || g.lay.Menu.W <= 0 {
 		return
 	}
@@ -522,13 +568,20 @@ func (g *game) Draw(screen *ebiten.Image) {
 	op.ColorScale.ScaleWithColor(color.RGBA{42, 33, 28, 235})
 	screen.DrawImage(g.pixel, op)
 	rows := menuRows(view)
-	ink := color.RGBA{255, 246, 234, 255}
+	_, g.drawnUpdate = control.UpdateItem(view.Update)
 	for i, row := range rows {
+		ink := inkText
+		if row.hot {
+			ink = inkFurHot
+		}
 		text.Draw(screen, row.label, basicfont.Face7x13, g.lay.Menu.X+12, g.lay.Menu.Y+menuPad+i*rowH+14, ink)
 	}
 }
 
 func activity(view control.View, tick int64) Activity {
+	if s := view.Update.State; s == update.Downloading || s == update.Installing {
+		return ActivityPaws
+	}
 	if view.Paused {
 		return ActivitySleep
 	}
@@ -550,6 +603,7 @@ func activity(view control.View, tick int64) Activity {
 type menuRow struct {
 	id    string
 	label string
+	hot   bool
 }
 
 func menuRows(view control.View) []menuRow {
@@ -576,8 +630,14 @@ func menuRows(view control.View) []menuRow {
 		{id: "interval", label: "Idle every " + control.IntervalLabel(view.Interval)},
 		{id: "duration", label: control.WatchLabel(view.Duration)},
 		{id: "hide", label: hide},
-		{id: "quit", label: "Quit"},
 	}
+	if label, _ := control.UpdateItem(view.Update); label != "" {
+		rows = append(rows, menuRow{id: "update", label: label, hot: view.Update.State == update.Available})
+	}
+	rows = append(rows,
+		menuRow{id: "about", label: "About Catsitter"},
+		menuRow{id: "quit", label: "Quit"},
+	)
 	if view.Trusted {
 		return rows
 	}

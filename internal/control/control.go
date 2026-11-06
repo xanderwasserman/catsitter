@@ -4,6 +4,15 @@ package control
 import (
 	"fmt"
 	"time"
+
+	"github.com/xanderwasserman/catsitter/internal/update"
+)
+
+// Author, AuthorURL and Project are shown in About.
+const (
+	Author    = "@xanderwasserman"
+	AuthorURL = "https://github.com/xanderwasserman"
+	Project   = "https://github.com/xanderwasserman/catsitter"
 )
 
 // View is a snapshot of the settings the menus display.
@@ -24,6 +33,9 @@ type View struct {
 	WindowSet bool
 	Trusted   bool
 	Quitting  bool
+	Update    update.Status
+	// AboutAsks counts requests to show About, so the cat can tell a new one.
+	AboutAsks int
 }
 
 // Controller is implemented by the running app.
@@ -41,6 +53,11 @@ type Controller interface {
 	BringBack()
 	// RequestAccess explains the missing input permission and offers to fix it.
 	RequestAccess()
+	CheckForUpdates()
+	InstallUpdate()
+	SetAutoUpdate(bool)
+	// ShowAbout asks the cat to show its About panel.
+	ShowAbout()
 	Quit()
 	SaveWindow(x, y int)
 }
@@ -114,4 +131,45 @@ func WatchLabel(d time.Duration) string {
 		return "Until I stop it"
 	}
 	return "For " + DurationLabel(d)
+}
+
+// UpdateAction is what the update menu item does when chosen.
+type UpdateAction int
+
+const (
+	UpdateNone UpdateAction = iota
+	UpdateCheck
+	UpdateInstall
+	// UpdateOpenPage opens the release page, for copies the installer does not manage.
+	UpdateOpenPage
+)
+
+// UpdateItem is the update line both menus show. An empty label means no line.
+func UpdateItem(st update.Status) (string, UpdateAction) {
+	if !st.Enabled {
+		return "", UpdateNone
+	}
+	switch st.State {
+	case update.Downloading:
+		return fmt.Sprintf("Updating... %d%%", int(st.Progress*100)), UpdateNone
+	case update.Installing:
+		return "Installing " + st.Latest.Version.String() + "...", UpdateNone
+	case update.Available, update.Failed:
+		if !st.CanInstall {
+			return "Get Catsitter " + st.Latest.Version.String() + "...", UpdateOpenPage
+		}
+		return "Update to " + st.Latest.Version.String(), UpdateInstall
+	}
+	if st.Checking {
+		return "Checking for updates...", UpdateNone
+	}
+	return "Check for updates", UpdateCheck
+}
+
+// VersionLine is the attribution line, for example "Catsitter 0.1.2 by @xanderwasserman".
+func VersionLine(version string) string {
+	if !update.IsRelease(version) {
+		version = "dev build"
+	}
+	return "Catsitter " + version + " by " + Author
 }

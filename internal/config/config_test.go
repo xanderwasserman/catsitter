@@ -92,3 +92,14 @@ func TestLoadCorrupt(t *testing.T) {
 		t.Fatal("expected error")
 	}
 }
+
+func TestOldConfigKeepsUpdateChecksOn(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.json")
+	if err := os.WriteFile(path, []byte(`{"interval":"10s","pixels":1,"mouse":true}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load(path)
+	if err != nil || !cfg.CheckUpdates {
+		t.Fatalf("%+v %v", cfg, err)
+	}
+}

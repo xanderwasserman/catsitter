@@ -70,3 +70,32 @@ func TestMenuLabelsFitTheMenu(t *testing.T) {
 		}
 	}
 }
+
+func TestMenuHasUpdateAndAbout(t *testing.T) {
+	ids := func(v control.View) []string {
+		var out []string
+		for _, r := range menuRows(v) {
+			out = append(out, r.id)
+		}
+		return out
+	}
+	dev := ids(control.View{Trusted: true})
+	if dev[len(dev)-2] != "about" || dev[len(dev)-1] != "quit" {
+		t.Errorf("dev rows %v", dev)
+	}
+	for _, id := range dev {
+		if id == "update" {
+			t.Error("dev builds show no update row")
+		}
+	}
+	rows := menuRows(control.View{Trusted: true, Update: available()})
+	row := rows[len(rows)-3]
+	if row.id != "update" || row.label != "Update to 0.1.3" || !row.hot {
+		t.Errorf("update row %+v", row)
+	}
+	for _, r := range rows {
+		if len(r.label)*7+12 > menuW {
+			t.Errorf("row %q is wider than the menu", r.label)
+		}
+	}
+}

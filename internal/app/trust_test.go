@@ -40,7 +40,7 @@ func (g *fakeGate) counts() (prompts, granted int) {
 }
 
 func newTrustApp(gate *fakeGate) *App {
-	return New(config.Defaults(), config.Defaults(), "", host.Backends{Gate: gate})
+	return New(config.Defaults(), config.Defaults(), "", host.Backends{Gate: gate}, nil)
 }
 
 func TestMissingPermissionPromptsOnce(t *testing.T) {
@@ -83,7 +83,7 @@ func TestNoPromptWhenNudgesAreOff(t *testing.T) {
 	gate := &fakeGate{}
 	cfg := config.Defaults()
 	cfg.Mouse, cfg.Shift, cfg.Switch = false, false, false
-	a := New(cfg, cfg, "", host.Backends{Gate: gate})
+	a := New(cfg, cfg, "", host.Backends{Gate: gate}, nil)
 	a.applyTrust(false)
 	if p, _ := gate.counts(); p != 0 {
 		t.Fatalf("prompts %d", p)

@@ -11,12 +11,17 @@ import (
 	"time"
 
 	"fyne.io/systray"
+	"github.com/xanderwasserman/catsitter/internal/browser"
 	"github.com/xanderwasserman/catsitter/internal/control"
+	"github.com/xanderwasserman/catsitter/internal/update"
 )
 
 // Handle starts the tray on the UI thread and stops it on shutdown.
 type Handle struct {
-	ctrl  control.Controller
+	ctrl control.Controller
+	// shown is what the update item said at the last sync, so a click does
+	// what the user read even if a check landed since.
+	shown control.UpdateAction
 	start func()
 	end   func()
 	once  sync.Once
@@ -92,6 +97,10 @@ func (h *Handle) ready() {
 	hide := systray.AddMenuItem("Hide cat", "Hide the cat and keep working")
 	recall := systray.AddMenuItem("Bring cat back", "Put the cat back on screen")
 	systray.AddSeparator()
+	upd := systray.AddMenuItem("Check for updates", "Look for a new Catsitter")
+	upd.Hide()
+	about := systray.AddMenuItem(control.VersionLine(h.ctrl.View().Update.Version), "About Catsitter")
+	systray.AddSeparator()
 	quit := systray.AddMenuItem("Quit", "Quit Catsitter")
 
 	go func() {
@@ -115,6 +124,10 @@ func (h *Handle) ready() {
 				h.ctrl.ToggleHidden()
 			case <-recall.ClickedCh:
 				h.ctrl.BringBack()
+			case <-upd.ClickedCh:
+				h.runUpdate(h.ctrl.View().Update)
+			case <-about.ClickedCh:
+				h.ctrl.ShowAbout()
 			case <-quit.ClickedCh:
 				h.ctrl.Quit()
 				return
@@ -123,15 +136,20 @@ func (h *Handle) ready() {
 				if view.Quitting {
 					return
 				}
+				tip := "Catsitter"
 				if view.Trusted {
 					paused.Hide()
 					allow.Hide()
-					systray.SetTooltip("Catsitter")
 				} else {
 					paused.Show()
 					allow.Show()
-					systray.SetTooltip("Catsitter: nudges paused until you allow Accessibility")
+					tip = "Catsitter: nudges paused until you allow Accessibility"
 				}
+				if view.Update.State == update.Available {
+					tip += " (" + view.Update.Latest.Version.String() + " is out)"
+				}
+				systray.SetTooltip(tip)
+				h.shown = syncUpdate(upd, view.Update)
 				if view.Paused {
 					pause.SetTitle("Resume")
 				} else {
@@ -175,6 +193,36 @@ func (h *Handle) ready() {
 	}
 }
 
+func (h *Handle) runUpdate(st update.Status) {
+	if _, now := control.UpdateItem(st); now != h.shown {
+		return
+	}
+	switch h.shown {
+	case control.UpdateCheck:
+		h.ctrl.CheckForUpdates()
+	case control.UpdateInstall:
+		h.ctrl.InstallUpdate()
+	case control.UpdateOpenPage:
+		browser.Open(st.Latest.URL)
+	}
+}
+
+func syncUpdate(item *systray.MenuItem, st update.Status) control.UpdateAction {
+	label, action := control.UpdateItem(st)
+	if label == "" {
+		item.Hide()
+		return action
+	}
+	item.SetTitle(label)
+	if action == control.UpdateNone {
+		item.Disable()
+	} else {
+		item.Enable()
+	}
+	item.Show()
+	return action
+}
+
 func setCheck(item *systray.MenuItem, on bool) {
 	if on {
 		item.Check()
@@ -182,6 +230,9 @@ func setCheck(item *systray.MenuItem, on bool) {
 		item.Uncheck()
 	}
 }
+
+// Face is the tray cat face, scale pixels per unit, for drawing elsewhere.
+func Face(scale int) *image.RGBA { return iconImage(scale, false) }
 
 // iconPNG is iconImage encoded as PNG.
 func iconPNG(scale int, rim bool) []byte {

@@ -27,6 +27,11 @@ type Flags struct {
 	NoShift   bool
 	Switch    bool
 	NoSwitch  bool
+	// NoUpdateCheck turns off the automatic update check for this run.
+	NoUpdateCheck bool
+	// CheckUpdate and Update are terminal commands that run instead of the app.
+	CheckUpdate bool
+	Update      bool
 
 	setSeconds   bool
 	setPixels    bool
@@ -66,6 +71,9 @@ func ParseFlags(argv []string, out io.Writer) (Flags, error) {
 	fs.BoolVar(&f.NoShift, "no-shift", false, "disable the Shift key tap")
 	fs.BoolVar(&f.Switch, "switch", false, "enable Alt or Cmd+Tab window switching")
 	fs.BoolVar(&f.NoSwitch, "no-switch", false, "disable window switching")
+	fs.BoolVar(&f.NoUpdateCheck, "no-update-check", false, "do not check for updates automatically")
+	fs.BoolVar(&f.CheckUpdate, "check-update", false, "check for a new version and exit")
+	fs.BoolVar(&f.Update, "update", false, "install the newest version and restart Catsitter")
 	if err := fs.Parse(argv[1:]); err != nil {
 		return Flags{}, err
 	}
@@ -171,6 +179,9 @@ func (f Flags) Apply(cfg Config) (Config, error) {
 	}
 	if f.setNoPet && f.NoPet {
 		cfg.HidePet = true
+	}
+	if f.NoUpdateCheck {
+		cfg.CheckUpdates = false
 	}
 	if f.setNoInhibit && f.setInhibit {
 		return Config{}, fmt.Errorf("pass only one of --inhibit and --no-inhibit")

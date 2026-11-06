@@ -227,6 +227,18 @@ try {
         throw 'uninstall left Catsitter running'
     }
 
+    # A running Catsitter installs a verified download from a local folder.
+    $env:CATSITTER_INSTALL_FROM = $serverRoot
+    & $scriptPath -Version '0.2.0'
+    if ($env:CATSITTER_INSTALL_FROM) {
+        throw 'the installer passed CATSITTER_INSTALL_FROM on'
+    }
+    $got = ((& $exe --version) | Out-String).Trim()
+    if ($got -ne '0.2.0') {
+        throw "local folder install returned $got"
+    }
+    & $scriptPath -Uninstall
+
     # The double-dash flag has to uninstall a fresh copy too.
     Set-Content -LiteralPath (Join-Path $serverRoot 'latest') -Value "v0.1.0`n" -Encoding ascii
     & $scriptPath --version '0.1.0'
