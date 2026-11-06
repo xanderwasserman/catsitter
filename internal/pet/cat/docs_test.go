@@ -13,11 +13,14 @@ import (
 
 var docsDir = filepath.Join("..", "..", "..", "docs")
 
+// previewed are the animations with a docs/<name>.png sheet and .gif.
+var previewed = []string{"walk", "sleep", "paws"}
+
 // readmeStrip is docs/cat.png: idle, walking, asleep and pawing at 5x.
 func readmeStrip() *image.RGBA {
 	const scale, step = 5, 180
 	all := Frames()
-	picks := []*image.RGBA{all["idle"][0], all["walk"][0], all["sleep"][3], all["paws"][0]}
+	picks := []*image.RGBA{all["idle"][0], all["walk"][0], all["sleep"][2], all["paws"][0]}
 	img := image.NewRGBA(image.Rect(0, 0, step*(len(picks)-1)+frameW*scale, frameH*scale))
 	for i, f := range picks {
 		drawScaled(img, f, i*step, scale)
@@ -25,10 +28,10 @@ func readmeStrip() *image.RGBA {
 	return img
 }
 
-// walkSheet is docs/walk.png: every walk frame at 8x.
-func walkSheet() *image.RGBA {
+// frameSheet is docs/<name>.png: every frame of an animation at 8x.
+func frameSheet(name string) *image.RGBA {
 	const scale, gap = 8, 32
-	frames := Frames()["walk"]
+	frames := Frames()[name]
 	step := frameW*scale + gap
 	img := image.NewRGBA(image.Rect(0, 0, step*len(frames)-gap, frameH*scale))
 	for i, f := range frames {
@@ -37,15 +40,15 @@ func walkSheet() *image.RGBA {
 	return img
 }
 
-// walkAnimation is docs/walk.gif: the walk at 8x and the app's 6 frames a second.
-func walkAnimation() *gif.GIF {
+// animation is docs/<name>.gif: an animation at 8x and the app's 6 frames a second.
+func animation(name string) *gif.GIF {
 	const scale = 8
 	pal := make(color.Palette, len(palette))
 	for i, c := range palette {
 		pal[i] = c
 	}
 	anim := &gif.GIF{}
-	for _, f := range Frames()["walk"] {
+	for _, f := range Frames()[name] {
 		big := image.NewRGBA(image.Rect(0, 0, frameW*scale, frameH*scale))
 		drawScaled(big, f, 0, scale)
 		frame := image.NewPaletted(big.Bounds(), pal)
@@ -70,17 +73,22 @@ func drawScaled(dst *image.RGBA, src *image.RGBA, x0, scale int) {
 }
 
 func TestDocsMatchTheArt(t *testing.T) {
-	pictures := map[string]image.Image{"cat.png": readmeStrip(), "walk.png": walkSheet()}
+	pictures := map[string]image.Image{"cat.png": readmeStrip()}
+	for _, name := range previewed {
+		pictures[name+".png"] = frameSheet(name)
+	}
 	if os.Getenv("UPDATE_SPRITES") == "1" {
 		for name, img := range pictures {
 			writePNG(t, filepath.Join(docsDir, name), img)
 		}
-		var buf bytes.Buffer
-		if err := gif.EncodeAll(&buf, walkAnimation()); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.WriteFile(filepath.Join(docsDir, "walk.gif"), buf.Bytes(), 0o644); err != nil {
-			t.Fatal(err)
+		for _, name := range previewed {
+			var buf bytes.Buffer
+			if err := gif.EncodeAll(&buf, animation(name)); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(filepath.Join(docsDir, name+".gif"), buf.Bytes(), 0o644); err != nil {
+				t.Fatal(err)
+			}
 		}
 		return
 	}
@@ -97,17 +105,23 @@ func TestDocsMatchTheArt(t *testing.T) {
 			t.Fatalf("docs/%s does not match the pixel data (run with UPDATE_SPRITES=1)", name)
 		}
 	}
-	b, err := os.ReadFile(filepath.Join(docsDir, "walk.gif"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	anim, err := gif.DecodeAll(bytes.NewReader(b))
-	if err != nil {
-		t.Fatal(err)
-	}
-	for i, want := range walkAnimation().Image {
-		if i >= len(anim.Image) || !samePixels(anim.Image[i], want) {
-			t.Fatalf("docs/walk.gif frame %d does not match the pixel data (run with UPDATE_SPRITES=1)", i)
+	for _, name := range previewed {
+		b, err := os.ReadFile(filepath.Join(docsDir, name+".gif"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		anim, err := gif.DecodeAll(bytes.NewReader(b))
+		if err != nil {
+			t.Fatal(err)
+		}
+		want := animation(name).Image
+		if len(anim.Image) != len(want) {
+			t.Fatalf("docs/%s.gif has %d frames, want %d (run with UPDATE_SPRITES=1)", name, len(anim.Image), len(want))
+		}
+		for i := range want {
+			if !samePixels(anim.Image[i], want[i]) {
+				t.Fatalf("docs/%s.gif frame %d does not match the pixel data (run with UPDATE_SPRITES=1)", name, i)
+			}
 		}
 	}
 }

@@ -312,50 +312,78 @@ func darken(rows []string) []string {
 	return out
 }
 
+// sleepFrames is the cat curled up on its side with its tail wrapped round
+// the front and its head on its paws. Its back rises and falls, and a Z
+// drifts up from its head.
 func sleepFrames() []*image.RGBA {
-	base := []string{
-		".........KKKK..........",
-		".......KKPPPPKK........",
-		"......KPP....PPK.......",
-		".....KP..KOOOK..PK.....",
-		"....KK.KOOOOOOK.KK.....",
-		"...KOOOOOOOOOOOOOOOK...",
-		"..KOOOOODDOOOODDOOOOK..",
-		"..KOOKKKKKKKKKKKKKKOOK.",
-		"..KOOOOOOOOOOOOOOOOOK..",
-		"..KOOOOOOOOOOOOOOOOOK..",
-		"..KOOOOOWWNNWWWOOOOOK..",
-		"...KOOOOOWWWWWOOOOOK...",
-		"....KKOOOWWWWWOOOKK....",
-		"......KOOOLLLLOOOK.....",
-		".....KOOLLLLLLLLOOK....",
-		"....KOOLLLLLLLLLLOOOK..",
-		"...KOOLLLLLLLLLLLLOOOK.",
-		"...KOOLLLLLLLLLLLLLOOK.",
-		"...KOOLLLLLLLLLLLLLOOK.",
-		"....KOOLLLLLLLLLLOOOK..",
-		".....KOOLLLLLLLLLOOK...",
-		"......KOODDDDDDDOOK....",
-		".......KOOO..OOOOK.....",
-		"........KKK..KKKK......",
+	body := []string{
+		"......KKKKKKKK..........",
+		"....KKOODOODOOKK........",
+		"...KOODOOODOOODOK.......",
+		"..KOODOOODOOODOOOK......",
+		"..KOOOOOOOOOOOOOOOK.....",
+		".KOOOOOOOOOOOOOOOOK.....",
+		".KOOOOOOOOOOOOOOOOOK....",
+		".KOOOOOOOOOOOOOOOOOK....",
+		".KOOOOOOOOOOOOOOOOOK....",
+		"..KOOOOOOOOOOOOOOOOK....",
+		"...KKKKKKKKKKKKKKKK.....",
 	}
-	fixWidth(base)
-	frames := make([]*image.RGBA, 4)
-	zz := [][]string{
-		{"ZZ......", ".ZZ.....", "..ZZ....", "...ZZ..."},
-		{"........", "Z.......", ".Z......", "..Z....."},
+	tail := []string{
+		"..KKKKKKKKKKKKK.........",
+		".KOODOODOODOOOOK........",
+		"..KKKKKKKKKKKKK.........",
 	}
-	for i := 0; i < 4; i++ {
+	head := []string{
+		".............KK....KK...",
+		"............KPPK..KPPK..",
+		"............KPPOKKOPPK..",
+		"...........KOOOOOOOOOOK.",
+		"...........KOODDOOOOOOK.",
+		"...........KOOOOOKOOKOK.",
+		"...........KOOOOOOKKOOOK",
+		"...........KOOOOOOOOOWNK",
+		"...........KOOOOOOOOWWWK",
+		"..........KLLLKOOOWWWWK.",
+		"..........KKKKKKKKKKKK..",
+	}
+	small := []string{"ZZZZ", "..Z.", ".Z..", "ZZZZ"}
+	big := []string{"ZZZZZ", "...Z.", "..Z..", ".Z...", "ZZZZZ"}
+	// The back rises by repeating a row through the middle of the body.
+	breath := append(clone(body[:6]), body[5:]...)
+	type step struct {
+		in     bool
+		z      []string
+		zx, zy int
+	}
+	steps := []step{
+		{false, small, 24, 9},
+		{true, small, 25, 7},
+		{true, big, 25, 4},
+		{true, big, 26, 2},
+		{false, big, 26, 0},
+		{false, nil, 0, 0},
+	}
+	const ground = 27
+	frames := make([]*image.RGBA, len(steps))
+	for i, st := range steps {
+		back := body
+		if st.in {
+			back = breath
+		}
 		c := newCanvas()
-		c.stamp((frameW-spriteCols)/2, 4, base)
-		// A small Z drifting up beside the ear.
-		z := []string{zz[0][i], zz[1][i]}
-		c.stamp(22, 2+((3-i)%3), z)
+		x := (frameW - spriteCols) / 2
+		c.stamp(x, ground+1-len(back), back)
+		c.stamp(x, ground+1-len(tail), tail)
+		c.stamp(x, ground+1-len(head), head)
+		c.stamp(st.zx, st.zy, st.z)
 		frames[i] = c.image()
 	}
 	return frames
 }
 
+// pawFrames is the sitting cat behind a keyboard, tapping it with one paw
+// while the other is raised. Pale marks flick off the keys under each tap.
 func pawFrames() []*image.RGBA {
 	body := []string{
 		".........KKKK..........",
@@ -364,48 +392,72 @@ func pawFrames() []*image.RGBA {
 		".....KP..KOOOK..PK.....",
 		"....KK.KOOOOOOK.KK.....",
 		"...KOOOODDOOOODDOOOK...",
+		"..KOOOOOOOOOOOOOOOOOK..",
 		"..KOOOEEHBOOEEHBOOOOK..",
 		"..KOOOEEBBOOEEBBOOOOK..",
+		"..KOOOOOOOOOOOOOOOOOK..",
 		"..KOOOOOWWNNWWWOOOOOK..",
 		"...KOOOOOWWWWWOOOOOK...",
-		"....KOOOOLLLLLOOOOK....",
+		"....KKOOOWWWWWOOOKK....",
 		"...KOODOLLLLLLODOOOK...",
 		"..KOOODLLLLLLLLLDOOOK..",
-		"..KOODLLLLLLLLLLLDOOK..",
-		".KOOODLLLLLLLLLLLLDOOK.",
 	}
-	keys := []string{
-		".KMMMMMMMMMMMMMMMMMMMK.",
-		".KMYKYMYKYMYKYMYKYMYMK.",
-		".KMMMMMMMMMMMMMMMMMMMK.",
-		".KKKKKKKKKKKKKKKKKKKKK.",
+	keyboard := []string{
+		"....KKKKKKKKKKKKKKKKKKKKKKKK....",
+		"...KMMMMMMMMMMMMMMMMMMMMMMMMK...",
+		"...KMYYMYYMYYMYYMYYMYYMYYMMMK...",
+		"..KMMMMMMMMMMMMMMMMMMMMMMMMMMK..",
+		"..KMMYYMYYMYYMYYMYYMYYMYYMYYMK..",
+		".KMMMMMMMMMMMMMMMMMMMMMMMMMMMMK.",
+		".KMYYMYYYYYYYYYYYYYYYYYYYYMYYMK.",
+		".KMMMMMMMMMMMMMMMMMMMMMMMMMMMMK.",
+		".KKKKKKKKKKKKKKKKKKKKKKKKKKKKKK.",
 	}
-	left := []string{
-		".KOOOK..........KOOOK..",
-		"..KKKK..........KKKK...",
+	down := []string{
+		"KOOOOK",
+		"KOOOOK",
+		"KOOOOK",
+		"KOOOOK",
+		"KLLLLK",
+		".KKKK.",
 	}
-	right := []string{
-		"..KOOOK......KOOOK.....",
-		"...KKKK......KKKK......",
+	up := []string{
+		".KKKK.",
+		"KOOOOK",
+		"KOOOOK",
+		"KLLLLK",
+		"KKOOKK",
+		".KOOK.",
+		".KOOK.",
 	}
-	both := []string{
-		".KOOOK........KOOOK....",
-		"..KKKK........KKKK.....",
+	tap := []string{
+		"H......H",
+		".H....H.",
 	}
-	alt := []string{
-		"...KOOOK..KOOOK........",
-		"....KKKK..KKKK.........",
-	}
-	paws := [][]string{left, right, both, alt}
-	fixWidth(body)
-	fixWidth(keys)
-	fixWidth(left, right, both, alt)
-	frames := make([]*image.RGBA, len(paws))
-	for i, paw := range paws {
+	// A raised paw lifts clear of the keys and swings out past the cheek.
+	type side struct{ downX, upX int }
+	left, right := side{6, 4}, side{20, 22}
+	const downY, upY = 18, 12
+	type hit struct{ leftUp, rightUp bool }
+	hits := []hit{{false, true}, {false, false}, {true, false}, {false, false}}
+	frames := make([]*image.RGBA, len(hits))
+	for i, h := range hits {
 		c := newCanvas()
-		c.stamp((frameW-spriteCols)/2, 1, body)
-		c.stamp((frameW-spriteCols)/2, 16, paw)
-		c.stamp((frameW-spriteCols)/2, 20, keys)
+		c.stamp((frameW-spriteCols)/2, 4, body)
+		c.stamp(0, 19, keyboard)
+		for _, p := range []struct {
+			side
+			up, taps bool
+		}{{left, h.leftUp, h.rightUp}, {right, h.rightUp, h.leftUp}} {
+			if p.up {
+				c.stamp(p.upX, upY, up)
+				continue
+			}
+			c.stamp(p.downX, downY, down)
+			if p.taps {
+				c.stamp(p.downX-1, downY+2, tap)
+			}
+		}
 		frames[i] = c.image()
 	}
 	return frames

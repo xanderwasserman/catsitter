@@ -110,12 +110,14 @@ func writePNG(t *testing.T, path string, img image.Image) {
 	}
 }
 
-func TestWalkKeepsTheGround(t *testing.T) {
+func TestPosesShareTheGround(t *testing.T) {
 	all := Frames()
 	ground := lowestRow(all["idle"][0])
-	for i, f := range all["walk"] {
-		if got := lowestRow(f); got != ground {
-			t.Fatalf("walk frame %d stands on row %d, idle on %d", i, got, ground)
+	for name, frames := range all {
+		for i, f := range frames {
+			if got := lowestRow(f); got != ground {
+				t.Fatalf("%s frame %d stands on row %d, idle on %d", name, i, got, ground)
+			}
 		}
 	}
 }
