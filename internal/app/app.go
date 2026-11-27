@@ -51,6 +51,11 @@ type App struct {
 	relaunch  platform.Relauncher
 	// relaunched is set when relaunch started this process.
 	relaunched bool
+	// reopen is set when nudges wait for the user to quit and reopen.
+	reopen atomic.Bool
+	// granting is set by a trusted poll that follows an untrusted one. The
+	// permission watch alone reads and writes it.
+	granting bool
 }
 
 // New prepares a session. live is what this run uses, including one-off
@@ -138,41 +143,55 @@ func (a *App) watchPermission(ctx context.Context) {
 }
 
 func (a *App) applyTrust(ok bool) {
+	if a.quit.Load() {
+		return
+	}
 	was := a.trusted.Swap(ok)
+	if !ok {
+		a.granting = false
+		a.reopen.Store(false)
+	}
 	a.mu.Lock()
 	want := a.cfg.Mouse || a.cfg.Shift || a.cfg.Switch
 	a.pushLocked()
 	a.mu.Unlock()
-	if ok {
-		if !a.settled.Swap(true) {
-			a.welcome(was)
+	if !ok {
+		if !want || a.settled.Load() || a.prompted.Swap(true) {
+			return
 		}
+		log.Printf("accessibility permission is missing; nudges wait, the sleep inhibitor still runs")
+		a.gate.Prompt()
 		return
 	}
-	if !want || a.settled.Load() || a.prompted.Swap(true) {
-		return
-	}
-	log.Printf("accessibility permission is missing; nudges wait, the sleep inhibitor still runs")
-	a.gate.Prompt()
-}
-
-// welcome runs once, the first time the permission is seen. started is
-// whether it was there when this process started. A grant that arrives while
-// running relaunches Catsitter, so nudges start from a process that has it.
-func (a *App) welcome(started bool) {
+	first := !a.settled.Swap(true)
 	switch {
-	case a.relaunched:
+	case !was:
+		// A grant counts once a second poll in a row confirms it.
+		a.granting = true
+	case a.granting:
+		a.granting = false
+		a.granted()
+	case first && a.relaunched:
 		log.Printf("accessibility permission granted; nudges are on")
 		a.gate.Granted()
-	case started:
+	}
+}
+
+// granted acts on a permission that arrived while this process runs. macOS
+// may keep event posting blocked for the process, so Catsitter relaunches
+// once. A copy that was itself relaunched asks the user to reopen it instead.
+func (a *App) granted() {
+	switch {
 	case a.relaunch == nil:
 		log.Printf("accessibility permission granted; nudges are on")
 		a.gate.Granted()
-	case a.relaunch.Relaunch():
+	case !a.relaunched && a.relaunch.Relaunch():
 		log.Printf("accessibility permission granted; restarting so nudges can post")
 		a.Quit()
 	default:
 		log.Printf("accessibility permission granted; quit and reopen Catsitter so nudges can post")
+		a.reopen.Store(true)
+		a.push()
 		a.gate.Reopen()
 	}
 }
@@ -232,6 +251,7 @@ func (a *App) View() control.View {
 		WindowY:   a.cfg.WindowY,
 		WindowSet: a.cfg.WindowSet,
 		Trusted:   a.trusted.Load(),
+		Reopen:    a.reopen.Load(),
 		Quitting:  a.quit.Load(),
 		Update:    st,
 		AboutAsks: int(a.aboutAsks.Load()),
@@ -384,7 +404,7 @@ func (a *App) pushLocked() {
 		Duration: a.cfg.LimitDuration(),
 		Paused:   a.paused,
 	}
-	if !a.trusted.Load() {
+	if !a.trusted.Load() || a.reopen.Load() {
 		st.Mouse, st.Shift, st.Switch = false, false, false
 	}
 	a.sched.Update(st)

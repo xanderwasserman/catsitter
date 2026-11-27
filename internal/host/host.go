@@ -15,7 +15,7 @@ type Backends struct {
 	Inhibit platform.Inhibitor
 	Gate    platform.Gate
 	// Relaunch restarts Catsitter after a permission granted while it runs.
-	// It is nil where the grant takes effect without a restart.
+	// It is nil where no restart is needed.
 	Relaunch platform.Relauncher
 	Close    func()
 	// Pump runs queued main-thread work. The pet window calls it every frame.

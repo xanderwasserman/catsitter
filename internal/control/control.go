@@ -32,8 +32,10 @@ type View struct {
 	WindowY   int
 	WindowSet bool
 	Trusted   bool
-	Quitting  bool
-	Update    update.Status
+	// Reopen is set when nudges wait for Catsitter to be quit and reopened.
+	Reopen   bool
+	Quitting bool
+	Update   update.Status
 	// AboutAsks counts requests to show About, so the cat can tell a new one.
 	AboutAsks int
 }

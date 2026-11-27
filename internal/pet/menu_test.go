@@ -1,6 +1,7 @@
 package pet
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/xanderwasserman/catsitter/internal/control"
@@ -154,11 +155,23 @@ func TestMissingAccessLeadsTheMenu(t *testing.T) {
 	}
 }
 
+func TestReopenLeadsTheMenuWithoutAccessRow(t *testing.T) {
+	rows := menuRows(control.View{Trusted: true, Reopen: true})
+	if rows[0].id != "paused" || !strings.Contains(rows[0].label, "reopen") {
+		t.Fatalf("first row %+v", rows[0])
+	}
+	for _, row := range rows {
+		if row.id == "access" {
+			t.Fatalf("access row while waiting for a reopen: %+v", row)
+		}
+	}
+}
+
 func TestMenuLabelsFitTheMenu(t *testing.T) {
 	const textX, advance = 12, 7
 	for _, iv := range control.Intervals {
 		for _, d := range control.Durations {
-			for _, row := range menuRows(control.View{Interval: iv, Duration: d}) {
+			for _, row := range append(menuRows(control.View{Interval: iv, Duration: d}), menuRows(control.View{Reopen: true})[0]) {
 				if w := textX + len(row.label)*advance; w > menuW {
 					t.Fatalf("%q is %d px wide, menu is %d", row.label, w, menuW)
 				}
