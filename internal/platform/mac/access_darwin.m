@@ -1,5 +1,6 @@
 #import <AppKit/AppKit.h>
 #import <ApplicationServices/ApplicationServices.h>
+#import <Security/Security.h>
 
 static void csActivateSelf(void) {
 	if (@available(macOS 14, *)) {
@@ -9,12 +10,97 @@ static void csActivateSelf(void) {
 	}
 }
 
-// csOpenAccessSettings opens Privacy & Security > Accessibility. It does not
-// ask macOS to prompt, because that adds a second alert for the same pane.
-void csOpenAccessSettings(void) {
+static NSString *const csAuthAlertApp = @"com.apple.accessibility.universalAccessAuthWarn";
+static const int csAuthAlertChecks = 10;
+static const int64_t csAuthAlertInterval = 200 * NSEC_PER_MSEC;
+
+static void csOpenAccessPane(void) {
+	NSURL *url = [NSURL URLWithString:@"x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility"];
+	[[NSWorkspace sharedWorkspace] openURL:url];
+}
+
+// csAuthAlertShowing reports whether macOS's own Accessibility alert is on
+// screen. Window owners are readable without extra permission.
+static BOOL csAuthAlertShowing(void) {
 	@autoreleasepool {
-		NSURL *url = [NSURL URLWithString:@"x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility"];
-		[[NSWorkspace sharedWorkspace] openURL:url];
+		NSMutableSet *pids = [NSMutableSet set];
+		for (NSRunningApplication *app in [NSRunningApplication runningApplicationsWithBundleIdentifier:csAuthAlertApp]) {
+			[pids addObject:@([app processIdentifier])];
+		}
+		if ([pids count] == 0) {
+			return NO;
+		}
+		CFArrayRef windows = CGWindowListCopyWindowInfo(kCGWindowListOptionOnScreenOnly, kCGNullWindowID);
+		if (windows == NULL) {
+			return NO;
+		}
+		BOOL showing = NO;
+		for (NSDictionary *info in (NSArray *)windows) {
+			if ([pids containsObject:info[(id)kCGWindowOwnerPID]]) {
+				showing = YES;
+				break;
+			}
+		}
+		CFRelease(windows);
+		return showing;
+	}
+}
+
+// csOpenPaneUnlessAlert leaves the way to Settings to macOS's alert when it
+// appears, and opens the pane itself otherwise.
+static void csOpenPaneUnlessAlert(int checks) {
+	if (csAuthAlertShowing()) {
+		return;
+	}
+	if (checks == 0) {
+		csOpenAccessPane();
+		return;
+	}
+	dispatch_after(dispatch_time(DISPATCH_TIME_NOW, csAuthAlertInterval), dispatch_get_main_queue(), ^{
+		csOpenPaneUnlessAlert(checks - 1);
+	});
+}
+
+// csRequestAccess asks macOS to list Catsitter under Accessibility. macOS
+// shows its alert, which opens Settings, only while Catsitter is not listed
+// yet, so the pane is opened directly when no alert appears.
+static void csRequestAccess(void) {
+	@autoreleasepool {
+		NSDictionary *ask = @{(id)kAXTrustedCheckOptionPrompt: @YES};
+		AXIsProcessTrustedWithOptions((CFDictionaryRef)ask);
+	}
+	csOpenPaneUnlessAlert(csAuthAlertChecks);
+}
+
+// csSignedAsBundle reports whether this app's code identity is its bundle
+// identifier, which macOS needs to keep an Accessibility grant. A bare binary
+// has no bundle identifier and counts as signed.
+int csSignedAsBundle(void) {
+	@autoreleasepool {
+		NSString *bundle = [[NSBundle mainBundle] bundleIdentifier];
+		if (bundle == nil) {
+			return 1;
+		}
+		SecCodeRef code = NULL;
+		if (SecCodeCopySelf(kSecCSDefaultFlags, &code) != errSecSuccess) {
+			return 0;
+		}
+		SecStaticCodeRef staticCode = NULL;
+		OSStatus status = SecCodeCopyStaticCode(code, kSecCSDefaultFlags, &staticCode);
+		CFRelease(code);
+		if (status != errSecSuccess) {
+			return 0;
+		}
+		CFDictionaryRef info = NULL;
+		status = SecCodeCopySigningInformation(staticCode, kSecCSDefaultFlags, &info);
+		CFRelease(staticCode);
+		if (status != errSecSuccess) {
+			return 0;
+		}
+		NSString *identifier = ((NSDictionary *)info)[(id)kSecCodeInfoIdentifier];
+		int same = [identifier isEqualToString:bundle] ? 1 : 0;
+		CFRelease(info);
+		return same;
 	}
 }
 
@@ -24,8 +110,8 @@ void csOpenAccessSettings(void) {
 
 @implementation CSAccessPanel
 - (void)openSettings:(id)sender {
-	csOpenAccessSettings();
 	[self.panel orderOut:nil];
+	csRequestAccess();
 }
 - (void)later:(id)sender {
 	[self.panel orderOut:nil];

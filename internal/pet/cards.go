@@ -130,7 +130,7 @@ func offerCard(st update.Status, goos string) card {
 	}
 	if goos == "darwin" {
 		c.lines = append(c.lines, cardLine{})
-		for _, line := range wrap("After the update, turn Catsitter on again in Accessibility settings.", cardCols) {
+		for _, line := range wrap("After this update, turn Catsitter on again in Privacy & Security > Accessibility.", cardCols) {
 			c.lines = append(c.lines, cardLine{text: line, tone: toneWarm})
 		}
 	}
@@ -146,7 +146,9 @@ func progressCard(st update.Status, goos string) card {
 	}
 	c.lines = []cardLine{{text: "Checksum matches. Installing."}, {text: "Back in a blink!", tone: toneWarm}}
 	if goos == "darwin" {
-		c.lines = append(c.lines, cardLine{text: "Then turn on Accessibility again.", tone: toneMuted})
+		for _, line := range wrap("Then turn Catsitter on again in Accessibility.", cardCols) {
+			c.lines = append(c.lines, cardLine{text: line, tone: toneMuted})
+		}
 	}
 	return c
 }
