@@ -64,8 +64,10 @@ aarch64 | arm64) goarch=arm64 ;;
 *) die "unsupported architecture: $(uname -m)" ;;
 esac
 
+bundle_id=com.xanderwasserman.catsitter
+app="$HOME/Applications/Catsitter.app"
 if [ "$goos" = "darwin" ]; then
-	install_bin="$HOME/Applications/Catsitter.app/Contents/MacOS/catsitter"
+	install_bin="$app/Contents/MacOS/catsitter"
 else
 	install_bin="$HOME/.local/bin/catsitter"
 fi
@@ -102,7 +104,7 @@ stop_running() {
 start_app() {
 	# Through Launch Services, macOS checks Accessibility for Catsitter itself
 	# rather than for this terminal.
-	if [ "$goos" = "darwin" ] && open "$HOME/Applications/Catsitter.app" >/dev/null 2>&1; then
+	if [ "$goos" = "darwin" ] && open "$app" >/dev/null 2>&1; then
 		return 0
 	fi
 	# A subshell so the pet survives this script exiting.
@@ -121,17 +123,95 @@ warn_path() {
 	echo 'export PATH="$HOME/.local/bin:$PATH"' >&2
 }
 
-# A new binary does not match the old Accessibility entry, which would look
-# on and not work. Clearing it lets the next launch add a fresh one.
+# The Accessibility entry is keyed by the bundle identifier and pinned to the
+# exact build it was granted to. A new build would leave it looking on while
+# macOS refuses it, so it is cleared and Catsitter asks again.
 forget_permission() {
 	if command -v tccutil >/dev/null 2>&1; then
-		tccutil reset Accessibility com.xanderwasserman.catsitter >/dev/null 2>&1 || true
+		tccutil reset Accessibility "$bundle_id" >/dev/null 2>&1 || true
 	fi
+}
+
+# signed_as_catsitter reports whether a bundle's code identity is the bundle
+# identifier. Copies installed by Catsitter 0.1.7 or earlier are not.
+signed_as_catsitter() {
+	codesign -dv "$1" 2>&1 | grep -qx "Identifier=$bundle_id"
+}
+
+# build_bundle assembles and signs Catsitter.app at $1 from the extracted
+# release. An ad-hoc signature over the whole bundle makes the bundle
+# identifier the code identity that Accessibility records.
+build_bundle() {
+	mkdir -p "$1/Contents/MacOS" "$1/Contents/Resources"
+	cp "$tmp/extract/catsitter" "$1/Contents/MacOS/catsitter"
+	chmod 755 "$1/Contents/MacOS/catsitter"
+	cat >"$1/Contents/Info.plist" <<EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleExecutable</key>
+	<string>catsitter</string>
+	<key>CFBundleIconFile</key>
+	<string>icon</string>
+	<key>CFBundleIdentifier</key>
+	<string>$bundle_id</string>
+	<key>CFBundleName</key>
+	<string>Catsitter</string>
+	<key>CFBundleDisplayName</key>
+	<string>Catsitter</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>$ver</string>
+	<key>CFBundleVersion</key>
+	<string>$ver</string>
+	<key>LSMinimumSystemVersion</key>
+	<string>11.0</string>
+	<key>LSUIElement</key>
+	<true/>
+	<key>NSHighResolutionCapable</key>
+	<true/>
+</dict>
+</plist>
+EOF
+	if [ -f "$tmp/extract/icon.icns" ]; then
+		cp "$tmp/extract/icon.icns" "$1/Contents/Resources/icon.icns"
+	fi
+	xattr -cr "$1"
+	codesign --force --sign - "$1" || die "could not sign Catsitter.app"
+	codesign --verify --strict "$1" || die "Catsitter.app failed signature verification"
+}
+
+# place_bundle swaps the staged bundle at $1 into place. If that fails, the
+# previous app is put back and started again if it was running.
+place_bundle() {
+	old="$app.old"
+	rm -rf "$old"
+	mkdir -p "$HOME/Applications"
+	if [ -d "$app" ]; then
+		mv "$app" "$old" || restore_and_die "could not move the previous Catsitter.app aside"
+	fi
+	if ! mv "$1" "$app"; then
+		rm -rf "$app"
+		restore_and_die "could not move Catsitter.app into place"
+	fi
+	rm -rf "$old"
+}
+
+restore_and_die() {
+	if [ -d "$old" ] && [ ! -e "$app" ]; then
+		mv "$old" "$app" || true
+	fi
+	if [ "$was_running" -eq 1 ] && [ -d "$app" ]; then
+		start_app
+	fi
+	die "$1"
 }
 
 remove_install() {
 	if [ "$goos" = "darwin" ]; then
-		rm -rf "$HOME/Applications/Catsitter.app"
+		rm -rf "$app"
 		forget_permission
 	else
 		rm -f "$install_bin"
@@ -147,6 +227,12 @@ if [ "$uninstall" -eq 1 ]; then
 	remove_install
 	echo "Uninstalled Catsitter. Settings were left in place."
 	exit 0
+fi
+
+if [ "$goos" = "darwin" ]; then
+	for tool in codesign xattr; do
+		command -v "$tool" >/dev/null 2>&1 || die "$tool is required"
+	done
 fi
 
 # fetch copies a release file from a URL or a local directory.
@@ -228,6 +314,14 @@ mkdir -p "$tmp/extract"
 tar -xf "$tmp/asset" -C "$tmp/extract" || die "could not extract $asset"
 [ -f "$tmp/extract/catsitter" ] || die "archive did not contain catsitter"
 
+if [ "$goos" = "darwin" ]; then
+	build_bundle "$tmp/Catsitter.app"
+	legacy=0
+	if [ -d "$app" ] && ! signed_as_catsitter "$app"; then
+		legacy=1
+	fi
+fi
+
 was_running=0
 if running; then
 	was_running=1
@@ -235,56 +329,23 @@ if running; then
 fi
 
 if [ "$goos" = "darwin" ]; then
-	app="$HOME/Applications/Catsitter.app"
+	updating=0
 	if [ -d "$app" ]; then
-		echo "macOS ties Accessibility to each build of this unsigned app, so allow Catsitter again in Privacy & Security > Accessibility."
+		updating=1
 	fi
-	rm -rf "$app"
+	place_bundle "$tmp/Catsitter.app"
 	forget_permission
-	mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
-	cp "$tmp/extract/catsitter" "$install_bin"
-	chmod 755 "$install_bin"
-	cat >"$app/Contents/Info.plist" <<EOF
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-	<key>CFBundleExecutable</key>
-	<string>catsitter</string>
-	<key>CFBundleIconFile</key>
-	<string>icon</string>
-	<key>CFBundleIdentifier</key>
-	<string>com.xanderwasserman.catsitter</string>
-	<key>CFBundleName</key>
-	<string>Catsitter</string>
-	<key>CFBundleDisplayName</key>
-	<string>Catsitter</string>
-	<key>CFBundlePackageType</key>
-	<string>APPL</string>
-	<key>CFBundleShortVersionString</key>
-	<string>$ver</string>
-	<key>CFBundleVersion</key>
-	<string>$ver</string>
-	<key>LSMinimumSystemVersion</key>
-	<string>11.0</string>
-	<key>LSUIElement</key>
-	<true/>
-	<key>NSHighResolutionCapable</key>
-	<true/>
-</dict>
-</plist>
-EOF
-	if [ -f "$tmp/extract/icon.icns" ]; then
-		cp "$tmp/extract/icon.icns" "$app/Contents/Resources/icon.icns"
-	fi
 	# Re-register the bundle so Finder, Spotlight and Launchpad show the new icon.
 	touch "$app"
 	lsregister=/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister
 	if [ -x "$lsregister" ]; then
 		"$lsregister" -f "$app" >/dev/null 2>&1 || true
 	fi
-	if command -v xattr >/dev/null 2>&1; then
-		xattr -dr com.apple.quarantine "$app" 2>/dev/null || true
+	if [ "$updating" -eq 1 ]; then
+		echo "After this update, turn Catsitter on again in Privacy & Security > Accessibility. macOS ties the permission to each build."
+	fi
+	if [ "$legacy" -eq 1 ]; then
+		echo "Catsitter 0.1.7 and earlier may have left Accessibility entries that no longer work. Select each Catsitter there and click - to remove it before turning on the new one."
 	fi
 	echo "Installed Catsitter $ver to $app"
 else

@@ -171,6 +171,8 @@ else
 	cmp -s "$root/packaging/icon.icns" "$home/Applications/Catsitter.app/Contents/Resources/icon.icns" || die "missing app icon"
 	grep -q "<key>CFBundleIconFile</key>" "$home/Applications/Catsitter.app/Contents/Info.plist" || die "Info.plist has no icon entry"
 	plutil -lint "$home/Applications/Catsitter.app/Contents/Info.plist" >/dev/null || die "Info.plist is not valid"
+	codesign --verify --strict "$home/Applications/Catsitter.app" || die "app bundle signature is not valid"
+	codesign -d --verbose=2 "$home/Applications/Catsitter.app" 2>&1 | grep -qx "Identifier=com.xanderwasserman.catsitter" || die "app bundle is not signed as com.xanderwasserman.catsitter"
 fi
 
 # Pinning an older version while latest has moved.
@@ -178,6 +180,12 @@ set_latest 0.2.0
 sh "$script" --version 0.1.0
 got=$("$bin" --version | tr -d ' \t\r\n')
 [ "$got" = "0.1.0" ] || die "pinned install changed the version to $got"
+
+legacy_note="Catsitter 0.1.7 and earlier"
+if [ "$goos" = "darwin" ]; then
+	# Copies from Catsitter 0.1.7 and earlier carry only the linker's signature.
+	codesign --force --sign - --identifier a.out "$bin" 2>/dev/null || die "could not mimic a legacy install"
+fi
 
 rm -f "$marker"
 "$bin" >/dev/null 2>&1 &
@@ -191,9 +199,18 @@ done
 before=$(tr -d ' \t\r\n' <"$marker")
 
 set_latest 0.2.0
-sh "$script"
+sh "$script" >"$work/update.log" 2>&1 || {
+	cat "$work/update.log"
+	die "update failed"
+}
+cat "$work/update.log"
 got=$("$bin" --version | tr -d ' \t\r\n')
 [ "$got" = "0.2.0" ] || die "update left version $got"
+if [ "$goos" = "darwin" ]; then
+	grep -q "$legacy_note" "$work/update.log" || die "update from a legacy install did not mention old Accessibility entries"
+	grep -q "turn Catsitter on again" "$work/update.log" || die "update did not mention Accessibility"
+	codesign --verify --strict "$home/Applications/Catsitter.app" || die "updated app bundle signature is not valid"
+fi
 i=0
 while [ ! -s "$marker" ] || [ "$(tr -d ' \t\r\n' <"$marker")" = "$before" ]; do
 	i=$((i + 1))
@@ -202,6 +219,21 @@ while [ ! -s "$marker" ] || [ "$(tr -d ' \t\r\n' <"$marker")" = "$before" ]; do
 done
 after=$(tr -d ' \t\r\n' <"$marker")
 [ "$after" != "$before" ] || die "restart kept the old pid"
+
+if [ "$goos" = "darwin" ]; then
+	# A failed signature must leave the running install in place.
+	fake="$work/fake-bin"
+	mkdir -p "$fake"
+	printf '#!/bin/sh\nexit 1\n' >"$fake/codesign"
+	chmod 755 "$fake/codesign"
+	if PATH="$fake:$PATH" sh "$script" --version 0.1.0; then
+		die "a failed signature was accepted"
+	fi
+	got=$("$bin" --version | tr -d ' \t\r\n')
+	[ "$got" = "0.2.0" ] || die "a failed signature changed the version to $got"
+	kill -0 "$after" >/dev/null 2>&1 || die "a failed signature stopped Catsitter"
+	[ "$(tr -d ' \t\r\n' <"$marker")" = "$after" ] || die "a failed signature restarted Catsitter"
+fi
 
 stamp=$(date -u +%s 2>/dev/null || echo now)
 # Touch is compared via checksum of the binary bytes after a skip.
@@ -213,7 +245,14 @@ still=$(tr -d ' \t\r\n' <"$marker")
 [ "$still" = "$after" ] || die "skip stopped the running Catsitter"
 
 # A running Catsitter installs a verified download from a local directory.
-CATSITTER_INSTALL_FROM="$server_root" sh "$script" --version 0.1.0
+CATSITTER_INSTALL_FROM="$server_root" sh "$script" --version 0.1.0 >"$work/local.log" 2>&1 || {
+	cat "$work/local.log"
+	die "local directory install failed"
+}
+cat "$work/local.log"
+if grep -q "$legacy_note" "$work/local.log"; then
+	die "a signed install was reported as legacy"
+fi
 got=$("$bin" --version | tr -d ' \t\r\n')
 [ "$got" = "0.1.0" ] || die "local directory install left version $got"
 
