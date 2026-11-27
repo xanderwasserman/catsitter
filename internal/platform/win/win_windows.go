@@ -51,7 +51,8 @@ const (
 )
 
 // reasonContext is REASON_CONTEXT with a simple reason string. pad covers
-// the larger detailed-string member of the union.
+// the larger detailed-string member of the union; the size matches on 64-bit
+// Windows only.
 type reasonContext struct {
 	Version uint32
 	Flags   uint32

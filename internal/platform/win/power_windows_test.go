@@ -27,7 +27,7 @@ func onThread(f func() error) error {
 	return <-done
 }
 
-func TestInhibitorReleasesFromAnotherThread(t *testing.T) {
+func TestInhibitorReleaseSucceedsFromAnotherThread(t *testing.T) {
 	p := newPowerInhibitor(powerAPI{})
 	for range 3 {
 		if err := onThread(p.Acquire); err != nil {

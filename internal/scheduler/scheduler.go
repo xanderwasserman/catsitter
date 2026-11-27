@@ -49,7 +49,7 @@ type Scheduler struct {
 	used        time.Duration
 	lastNudge   time.Time
 	held        bool
-	partial     bool // a failed Acquire may have left part of the inhibitor held
+	partial     bool // the last Acquire or Release failed, so the inhibitor state is unknown
 	expired     bool
 	idleWarn    bool
 	inhibitWarn bool
@@ -201,7 +201,7 @@ func (s *Scheduler) Stop() {
 
 // setInhibit runs while s.mu is held.
 func (s *Scheduler) setInhibit(on bool) {
-	if s.inhibit == nil || (on == s.held && (on || !s.partial)) {
+	if s.inhibit == nil || (on == s.held && !s.partial) {
 		return
 	}
 	var err error
@@ -211,9 +211,7 @@ func (s *Scheduler) setInhibit(on bool) {
 		err = s.inhibit.Release()
 	}
 	if err != nil {
-		if on {
-			s.partial = true
-		}
+		s.partial = true
 		if !s.inhibitWarn {
 			s.inhibitWarn = true
 			log.Printf("sleep inhibitor: %v", err)

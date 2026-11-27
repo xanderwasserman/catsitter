@@ -2,6 +2,7 @@ package scheduler
 
 import (
 	"errors"
+	"slices"
 	"testing"
 	"time"
 )
@@ -19,9 +20,10 @@ type errIdle struct{}
 func (errIdle) IdleTime() (time.Duration, error) { return 0, errors.New("no display") }
 
 type fakeInhibit struct {
-	on     bool
-	calls  []bool
-	failOn bool
+	on      bool
+	calls   []bool
+	failOn  bool
+	failOff bool
 }
 
 func (f *fakeInhibit) Acquire() error {
@@ -35,6 +37,9 @@ func (f *fakeInhibit) Acquire() error {
 
 func (f *fakeInhibit) Release() error {
 	f.calls = append(f.calls, false)
+	if f.failOff {
+		return errors.New("stuck")
+	}
 	f.on = false
 	return nil
 }
@@ -324,7 +329,28 @@ func TestPauseAfterFailedAcquireReleases(t *testing.T) {
 	s.Tick()
 	s.Tick()
 	want := []bool{true, false}
-	if len(inh.calls) != len(want) || inh.calls[0] != want[0] || inh.calls[1] != want[1] {
+	if !slices.Equal(inh.calls, want) {
+		t.Fatalf("calls = %v, want %v", inh.calls, want)
+	}
+}
+
+func TestResumeAfterFailedReleaseAcquiresAgain(t *testing.T) {
+	inh := &fakeInhibit{}
+	s := New(&fakeIdle{d: 0}, &fakeNudge{}, inh, &fakeClock{t: time.Unix(0, 0)}, nil, nil)
+	st := baseSettings()
+	st.Mouse, st.Shift = false, false
+	s.Update(st)
+	s.Tick()
+	inh.failOff = true
+	st.Paused = true
+	s.Update(st)
+	s.Tick()
+	inh.failOff = false
+	st.Paused = false
+	s.Update(st)
+	s.Tick()
+	want := []bool{true, false, true}
+	if !slices.Equal(inh.calls, want) {
 		t.Fatalf("calls = %v, want %v", inh.calls, want)
 	}
 }
