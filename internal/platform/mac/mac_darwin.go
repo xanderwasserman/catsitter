@@ -46,7 +46,9 @@ static double csIdleSeconds(void) {
 }
 
 // csTrusted reports whether macOS counts this process as trusted for
-// Accessibility.
+// Accessibility. AXIsProcessTrusted follows the Accessibility switch, while
+// CGPreflightPostEventAccess can stay false in a running process until it
+// restarts.
 static int csTrusted(void) {
 	return AXIsProcessTrusted() ? 1 : 0;
 }

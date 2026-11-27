@@ -152,8 +152,9 @@ func (a *App) applyTrust(ok bool) {
 	}
 	was := a.trusted.Load()
 	if ok && !was && !a.granting {
-		// A grant counts once a second poll in a row confirms it. Until then
-		// Catsitter stays untrusted.
+		// A grant counts once a second poll in a row confirms it, because a
+		// single trusted poll can be a flicker while the switch is toggled and
+		// would relaunch for nothing. Until then Catsitter stays untrusted.
 		a.granting = true
 		return
 	}
@@ -190,11 +191,12 @@ func (a *App) applyTrust(ok bool) {
 // relaunched copy that started untrusted asks the user to reopen it instead,
 // so relaunches cannot repeat.
 func (a *App) granted() {
+	relaunchedUntrusted := a.relaunched && !a.startedTrusted
 	switch {
 	case a.relaunch == nil:
 		log.Printf("accessibility permission granted; nudges are on")
 		a.gate.Granted()
-	case !(a.relaunched && !a.startedTrusted) && a.relaunch.Relaunch():
+	case !relaunchedUntrusted && a.relaunch.Relaunch():
 		log.Printf("accessibility permission granted; restarting so nudges can post")
 		a.Quit()
 	default:
