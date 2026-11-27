@@ -2,6 +2,7 @@ package scheduler
 
 import (
 	"errors"
+	"slices"
 	"testing"
 	"time"
 )
@@ -19,9 +20,10 @@ type errIdle struct{}
 func (errIdle) IdleTime() (time.Duration, error) { return 0, errors.New("no display") }
 
 type fakeInhibit struct {
-	on     bool
-	calls  []bool
-	failOn bool
+	on      bool
+	calls   []bool
+	failOn  bool
+	failOff bool
 }
 
 func (f *fakeInhibit) Acquire() error {
@@ -35,6 +37,9 @@ func (f *fakeInhibit) Acquire() error {
 
 func (f *fakeInhibit) Release() error {
 	f.calls = append(f.calls, false)
+	if f.failOff {
+		return errors.New("stuck")
+	}
 	f.on = false
 	return nil
 }
@@ -310,6 +315,79 @@ func TestReleaseFailureStaysHeld(t *testing.T) {
 	if s.held {
 		t.Fatal("release should clear the hold once it succeeds")
 	}
+}
+
+func TestPauseAfterFailedAcquireReleases(t *testing.T) {
+	inh := &fakeInhibit{failOn: true}
+	s := New(&fakeIdle{d: 0}, &fakeNudge{}, inh, &fakeClock{t: time.Unix(0, 0)}, nil, nil)
+	st := baseSettings()
+	st.Mouse, st.Shift = false, false
+	s.Update(st)
+	s.Tick()
+	st.Paused = true
+	s.Update(st)
+	s.Tick()
+	s.Tick()
+	want := []bool{true, false}
+	if !slices.Equal(inh.calls, want) {
+		t.Fatalf("calls = %v, want %v", inh.calls, want)
+	}
+}
+
+func TestResumeAfterFailedReleaseAcquiresAgain(t *testing.T) {
+	inh := &fakeInhibit{}
+	s := New(&fakeIdle{d: 0}, &fakeNudge{}, inh, &fakeClock{t: time.Unix(0, 0)}, nil, nil)
+	st := baseSettings()
+	st.Mouse, st.Shift = false, false
+	s.Update(st)
+	s.Tick()
+	inh.failOff = true
+	st.Paused = true
+	s.Update(st)
+	s.Tick()
+	inh.failOff = false
+	st.Paused = false
+	s.Update(st)
+	s.Tick()
+	want := []bool{true, false, true}
+	if !slices.Equal(inh.calls, want) {
+		t.Fatalf("calls = %v, want %v", inh.calls, want)
+	}
+}
+
+func TestStopAfterFailedAcquireRetriesRelease(t *testing.T) {
+	inh := &acquireFailInhibit{failRelease: true}
+	s := New(&fakeIdle{d: 0}, &fakeNudge{}, inh, &fakeClock{t: time.Unix(0, 0)}, nil, nil)
+	st := baseSettings()
+	st.Mouse, st.Shift = false, false
+	s.Update(st)
+	s.Tick()
+	s.Stop()
+	s.Stop()
+	if inh.releases != 2 {
+		t.Fatalf("releases = %d", inh.releases)
+	}
+	inh.failRelease = false
+	s.Stop()
+	s.Stop()
+	if inh.releases != 3 {
+		t.Fatalf("releases after success = %d", inh.releases)
+	}
+}
+
+type acquireFailInhibit struct {
+	failRelease bool
+	releases    int
+}
+
+func (a *acquireFailInhibit) Acquire() error { return errors.New("partly held") }
+
+func (a *acquireFailInhibit) Release() error {
+	a.releases++
+	if a.failRelease {
+		return errors.New("stuck")
+	}
+	return nil
 }
 
 type releaseFailInhibit struct {

@@ -7,14 +7,14 @@ import (
 	"github.com/xanderwasserman/catsitter/internal/platform/win"
 )
 
-// Open wires Win32 idle time, SendInput, and SetThreadExecutionState.
+// Open wires Win32 idle time, SendInput, and power requests.
 func Open() Backends {
 	focus := &win.Focus{}
 	window := win.NewWindow(platform.OverlayTitle)
 	return Backends{
 		Idle:         idleFunc(win.IdleTime),
 		Nudge:        win.Nudger{},
-		Inhibit:      &win.Inhibitor{},
+		Inhibit:      win.NewInhibitor(),
 		Gate:         openGate{},
 		Close:        func() {},
 		Overlay:      func() error { return win.ExcludeFromSwitcher(platform.OverlayTitle) },

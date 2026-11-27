@@ -1,6 +1,6 @@
 // Package scheduler decides when to nudge an idle machine.
 // It never posts input while the user is active. The sleep inhibitor,
-// when enabled, stays held for the whole running session.
+// when enabled, is held while watching and dropped while paused.
 package scheduler
 
 import (
@@ -49,6 +49,7 @@ type Scheduler struct {
 	used        time.Duration
 	lastNudge   time.Time
 	held        bool
+	partial     bool // the last Acquire or Release failed, so the inhibitor state is unknown
 	expired     bool
 	idleWarn    bool
 	inhibitWarn bool
@@ -200,7 +201,7 @@ func (s *Scheduler) Stop() {
 
 // setInhibit runs while s.mu is held.
 func (s *Scheduler) setInhibit(on bool) {
-	if s.inhibit == nil || on == s.held {
+	if s.inhibit == nil || (on == s.held && !s.partial) {
 		return
 	}
 	var err error
@@ -210,6 +211,7 @@ func (s *Scheduler) setInhibit(on bool) {
 		err = s.inhibit.Release()
 	}
 	if err != nil {
+		s.partial = true
 		if !s.inhibitWarn {
 			s.inhibitWarn = true
 			log.Printf("sleep inhibitor: %v", err)
@@ -218,4 +220,5 @@ func (s *Scheduler) setInhibit(on bool) {
 	}
 	s.inhibitWarn = false
 	s.held = on
+	s.partial = false
 }
