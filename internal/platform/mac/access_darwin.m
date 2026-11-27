@@ -9,13 +9,10 @@ static void csActivateSelf(void) {
 	}
 }
 
-// csOpenAccessSettings adds Catsitter to the Accessibility list, then opens
-// Privacy & Security > Accessibility. Asking with the prompt option is the
-// documented way to get listed. macOS may show its own dialog for it too.
+// csOpenAccessSettings opens Privacy & Security > Accessibility. It does not
+// ask macOS to prompt, because that adds a second alert for the same pane.
 void csOpenAccessSettings(void) {
 	@autoreleasepool {
-		NSDictionary *ask = @{(id)kAXTrustedCheckOptionPrompt: @YES};
-		AXIsProcessTrustedWithOptions((CFDictionaryRef)ask);
 		NSURL *url = [NSURL URLWithString:@"x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility"];
 		[[NSWorkspace sharedWorkspace] openURL:url];
 	}

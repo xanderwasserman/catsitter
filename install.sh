@@ -121,8 +121,9 @@ warn_path() {
 	echo 'export PATH="$HOME/.local/bin:$PATH"' >&2
 }
 
-# A new binary does not match the old Accessibility entry, which would look
-# on and not work. Clearing it lets the next launch add a fresh one.
+# The Accessibility entry is keyed by the bundle identifier and pinned to the
+# exact build it was granted to. A new build would leave it looking on while
+# macOS refuses it, so it is cleared and the user adds Catsitter again.
 forget_permission() {
 	if command -v tccutil >/dev/null 2>&1; then
 		tccutil reset Accessibility com.xanderwasserman.catsitter >/dev/null 2>&1 || true
@@ -237,7 +238,7 @@ fi
 if [ "$goos" = "darwin" ]; then
 	app="$HOME/Applications/Catsitter.app"
 	if [ -d "$app" ]; then
-		echo "macOS ties Accessibility to each build of this unsigned app, so allow Catsitter again in Privacy & Security > Accessibility."
+		echo "macOS ties Accessibility to each build of Catsitter, so turn it on again in Privacy & Security > Accessibility after this update."
 	fi
 	rm -rf "$app"
 	forget_permission
@@ -277,6 +278,10 @@ EOF
 	if [ -f "$tmp/extract/icon.icns" ]; then
 		cp "$tmp/extract/icon.icns" "$app/Contents/Resources/icon.icns"
 	fi
+	# An ad-hoc signature over the whole bundle gives Catsitter its bundle
+	# identifier as its code identity, which is what Accessibility records.
+	command -v codesign >/dev/null 2>&1 || die "codesign is required"
+	codesign --force --sign - "$app" >/dev/null 2>&1 || die "could not sign $app"
 	# Re-register the bundle so Finder, Spotlight and Launchpad show the new icon.
 	touch "$app"
 	lsregister=/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister

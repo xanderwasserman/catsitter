@@ -81,14 +81,14 @@ The installer starts Catsitter for you. After that, open it like any other app: 
 
 ### macOS
 
-Catsitter needs Accessibility permission to move the mouse and press Shift. On first launch it explains why and offers an **Open Settings** button, which takes you to System Settings → Privacy & Security → Accessibility. Turn on the switch next to Catsitter. (On macOS 11 and 12 the same list is under System Preferences → Security & Privacy → Privacy → Accessibility.) Catsitter notices within a couple of seconds and shows "Thanks! Catsitter can nudge now."
+Catsitter needs Accessibility permission to move the mouse and press Shift. On first launch it explains why and offers an **Open Settings** button, which takes you to System Settings → Privacy & Security → Accessibility. Turn on the switch next to Catsitter. If Catsitter isn't in the list, click **+**, open the Applications folder in your home folder and choose Catsitter. (On macOS 11 and 12 the same list is under System Preferences → Security & Privacy → Privacy → Accessibility.) You don't need to restart Catsitter: it checks the permission every two seconds and shows "Thanks! Catsitter can nudge now." once macOS reports it. The permission stays when you quit and reopen Catsitter.
 
 Until you allow it, Catsitter keeps the screen awake but skips the mouse and Shift nudges. The cat's menu and the menu-bar menu both say that nudges are paused, and both have an **Allow Accessibility** item that shows the explanation again.
 
-**After every update you need to turn the switch on again.** The app isn't signed, so macOS treats each new build as a different app. The installer removes the old entry and reminds you, and so does the update panel before you click **Update now**. When it restarts Catsitter, Catsitter asks again and you turn the switch back on.
+**After every update you need to allow Catsitter again.** The installer gives the app a free ad-hoc signature rather than an Apple Developer ID, so macOS treats each new build as a different app. The installer removes the old entry and reminds you, and so does the update panel before you click **Update now**. When the new version starts, Catsitter asks again and you add it back as above.
 
 - Start Catsitter as an app, not by running the binary from a terminal. macOS gives the permission to whatever launched the program, so a terminal launch asks for the terminal instead.
-- The app is unsigned. The installer clears the quarantine flag, so Gatekeeper usually stays quiet. If it does block Catsitter, go to Privacy & Security and choose **Open Anyway**.
+- The app has no Apple Developer ID. The installer clears the quarantine flag, so Gatekeeper usually stays quiet. If it does block Catsitter, go to Privacy & Security and choose **Open Anyway**.
 - Catsitter has no Dock icon. Its controls are in the menu bar, as a small cat face.
 
 ### Windows

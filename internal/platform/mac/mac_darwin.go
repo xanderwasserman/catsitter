@@ -45,8 +45,10 @@ static double csIdleSeconds(void) {
 	return CGEventSourceSecondsSinceLastEventType(kCGEventSourceStateHIDSystemState, kCGAnyInputEventType);
 }
 
+// AXIsProcessTrusted can keep a stale answer for the life of the process,
+// while CGPreflightPostEventAccess asks the permission database each time.
 static int csTrusted(void) {
-	return AXIsProcessTrusted() ? 1 : 0;
+	return (CGPreflightPostEventAccess() || AXIsProcessTrusted()) ? 1 : 0;
 }
 
 static void csMouse(double *x, double *y) {

@@ -171,6 +171,8 @@ else
 	cmp -s "$root/packaging/icon.icns" "$home/Applications/Catsitter.app/Contents/Resources/icon.icns" || die "missing app icon"
 	grep -q "<key>CFBundleIconFile</key>" "$home/Applications/Catsitter.app/Contents/Info.plist" || die "Info.plist has no icon entry"
 	plutil -lint "$home/Applications/Catsitter.app/Contents/Info.plist" >/dev/null || die "Info.plist is not valid"
+	codesign --verify --strict "$home/Applications/Catsitter.app" || die "app bundle signature is not valid"
+	codesign -d --verbose=2 "$home/Applications/Catsitter.app" 2>&1 | grep -qx "Identifier=com.xanderwasserman.catsitter" || die "app bundle is not signed as com.xanderwasserman.catsitter"
 fi
 
 # Pinning an older version while latest has moved.

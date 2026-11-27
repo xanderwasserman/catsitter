@@ -17,7 +17,7 @@ const (
 	askWindow = "Allow Accessibility"
 	askTitle  = "Let Catsitter nudge your Mac"
 	askBody   = "When you step away, Catsitter moves the mouse by one pixel and taps Shift so your status stays active. macOS needs your OK for that.\n\n" +
-		"Click Open Settings, then turn on Catsitter in the Accessibility list. If macOS asks as well, choose Open System Settings. Your screen stays awake in the meantime."
+		"Click Open Settings, then turn on Catsitter in the Accessibility list. If Catsitter isn't listed, click +, open Applications in your home folder and choose Catsitter. Your screen stays awake in the meantime."
 	askOpen     = "Open Settings"
 	askLater    = "Not Now"
 	grantedNote = "Thanks! Catsitter can nudge now."
