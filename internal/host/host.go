@@ -14,7 +14,10 @@ type Backends struct {
 	Nudge   platform.Nudger
 	Inhibit platform.Inhibitor
 	Gate    platform.Gate
-	Close   func()
+	// Relaunch restarts Catsitter after a permission granted while it runs.
+	// It is nil where no restart is needed.
+	Relaunch platform.Relauncher
+	Close    func()
 	// Pump runs queued main-thread work. The pet window calls it every frame.
 	// It is nil where input does not need the main thread.
 	Pump func()
@@ -68,3 +71,4 @@ type openGate struct{}
 func (openGate) Trusted() bool { return true }
 func (openGate) Prompt()       {}
 func (openGate) Granted()      {}
+func (openGate) Reopen()       {}

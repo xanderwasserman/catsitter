@@ -8,7 +8,7 @@ import (
 )
 
 // Open wires Win32 idle time, SendInput, and power requests.
-func Open() Backends {
+func Open(string) Backends {
 	focus := &win.Focus{}
 	window := win.NewWindow(platform.OverlayTitle)
 	return Backends{

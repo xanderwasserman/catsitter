@@ -54,7 +54,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	backends := host.Open()
+	backends := host.Open(filepath.Dir(path))
 	defer backends.Close()
 	session := app.New(live, saved, path, backends, update.NewService(updateOptions(path, live.CheckUpdates)))
 	session.Start()

@@ -12,7 +12,7 @@ import (
 
 // Open connects to X11 and prepares a sleep inhibitor.
 // A missing X server (typical of a pure Wayland session) leaves nudges off.
-func Open() Backends {
+func Open(string) Backends {
 	b := Backends{
 		Idle:    noopIdle{},
 		Nudge:   noopNudge{},

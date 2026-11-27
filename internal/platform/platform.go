@@ -32,6 +32,17 @@ type Gate interface {
 	Trusted() bool
 	// Prompt explains the missing permission and offers its settings page.
 	Prompt()
-	// Granted confirms that the permission arrived while running.
+	// Granted confirms that nudges are on.
 	Granted()
+	// Reopen asks the user to quit and reopen Catsitter so nudges can post.
+	Reopen()
+}
+
+// Relauncher starts a fresh copy of Catsitter after this one has exited.
+type Relauncher interface {
+	// Relaunch arranges for a fresh copy to start once this process exits.
+	// It reports false when this copy cannot be started that way.
+	Relaunch() bool
+	// Relaunched reports whether Relaunch started this process.
+	Relaunched() bool
 }

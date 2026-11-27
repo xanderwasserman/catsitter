@@ -45,10 +45,12 @@ static double csIdleSeconds(void) {
 	return CGEventSourceSecondsSinceLastEventType(kCGEventSourceStateHIDSystemState, kCGAnyInputEventType);
 }
 
-// csTrusted asks whether this process may post the mouse and key events that
-// nudges send. AXIsProcessTrusted can keep a stale answer in a running process.
+// csTrusted reports whether macOS counts this process as trusted for
+// Accessibility. AXIsProcessTrusted follows the Accessibility switch, while
+// CGPreflightPostEventAccess can stay false in a running process until it
+// restarts.
 static int csTrusted(void) {
-	return CGPreflightPostEventAccess() ? 1 : 0;
+	return AXIsProcessTrusted() ? 1 : 0;
 }
 
 static void csMouse(double *x, double *y) {
@@ -106,7 +108,7 @@ func IdleTime() (time.Duration, error) {
 	return time.Duration(secs * float64(time.Second)), nil
 }
 
-// Trusted reports whether Accessibility permission allows posting events.
+// Trusted reports whether Catsitter is on in the Accessibility list.
 func Trusted() bool { return C.csTrusted() == 1 }
 
 const (

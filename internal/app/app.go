@@ -48,6 +48,17 @@ type App struct {
 	settled   atomic.Bool
 	updates   Updates
 	aboutAsks atomic.Int64
+	relaunch  platform.Relauncher
+	// relaunched is set when relaunch started this process.
+	relaunched bool
+	// startedTrusted is set when the permission was there at launch.
+	startedTrusted bool
+	// reopen is set when nudges wait for the user to quit and reopen.
+	reopen atomic.Bool
+	// granting is set by a trusted poll that follows an untrusted one, until
+	// the next poll confirms or drops it. The permission watch alone reads
+	// and writes it.
+	granting bool
 }
 
 // New prepares a session. live is what this run uses, including one-off
@@ -62,7 +73,10 @@ func New(live, saved config.Config, path string, b host.Backends, updates Update
 		closeFn: b.Close,
 		updates: updates,
 	}
-	a.trusted.Store(b.Gate == nil || b.Gate.Trusted())
+	a.relaunch = b.Relaunch
+	a.relaunched = b.Relaunch != nil && b.Relaunch.Relaunched()
+	a.startedTrusted = b.Gate == nil || b.Gate.Trusted()
+	a.trusted.Store(a.startedTrusted)
 	a.sched = scheduler.New(b.Idle, b.Nudge, b.Inhibit, nil, rand.IntN, func(t time.Time) {
 		a.lastNudge.Store(t.UnixNano())
 	})
@@ -133,23 +147,64 @@ func (a *App) watchPermission(ctx context.Context) {
 }
 
 func (a *App) applyTrust(ok bool) {
-	was := a.trusted.Swap(ok)
+	if a.quit.Load() {
+		return
+	}
+	was := a.trusted.Load()
+	if ok && !was && !a.granting {
+		// A grant counts once a second poll in a row confirms it, because a
+		// single trusted poll can be a flicker while the switch is toggled and
+		// would relaunch for nothing. Until then Catsitter stays untrusted.
+		a.granting = true
+		return
+	}
+	confirmed := ok && !was
+	a.granting = false
+	a.trusted.Store(ok)
+	if !ok {
+		a.reopen.Store(false)
+	}
 	a.mu.Lock()
 	want := a.cfg.Mouse || a.cfg.Shift || a.cfg.Switch
 	a.pushLocked()
 	a.mu.Unlock()
-	if ok {
-		if !a.settled.Swap(true) && !was {
-			log.Printf("accessibility permission granted; nudges are on")
-			a.gate.Granted()
+	if !ok {
+		if !want || a.settled.Load() || a.prompted.Swap(true) {
+			return
 		}
+		log.Printf("accessibility permission is missing; nudges wait, the sleep inhibitor still runs")
+		a.gate.Prompt()
 		return
 	}
-	if !want || a.settled.Load() || a.prompted.Swap(true) {
-		return
+	first := !a.settled.Swap(true)
+	switch {
+	case confirmed:
+		a.granted()
+	case first && a.relaunched:
+		log.Printf("accessibility permission granted; nudges are on")
+		a.gate.Granted()
 	}
-	log.Printf("accessibility permission is missing; nudges wait, the sleep inhibitor still runs")
-	a.gate.Prompt()
+}
+
+// granted acts on a permission that arrived while this process runs. macOS
+// may keep event posting blocked for the process, so Catsitter relaunches. A
+// relaunched copy that started untrusted asks the user to reopen it instead,
+// so relaunches cannot repeat.
+func (a *App) granted() {
+	relaunchedUntrusted := a.relaunched && !a.startedTrusted
+	switch {
+	case a.relaunch == nil:
+		log.Printf("accessibility permission granted; nudges are on")
+		a.gate.Granted()
+	case !relaunchedUntrusted && a.relaunch.Relaunch():
+		log.Printf("accessibility permission granted; restarting so nudges can post")
+		a.Quit()
+	default:
+		log.Printf("accessibility permission granted; quit and reopen Catsitter so nudges can post")
+		a.reopen.Store(true)
+		a.push()
+		a.gate.Reopen()
+	}
 }
 
 // RequestAccess shows the permission explanation again while it is missing.
@@ -207,6 +262,7 @@ func (a *App) View() control.View {
 		WindowY:   a.cfg.WindowY,
 		WindowSet: a.cfg.WindowSet,
 		Trusted:   a.trusted.Load(),
+		Reopen:    a.reopen.Load(),
 		Quitting:  a.quit.Load(),
 		Update:    st,
 		AboutAsks: int(a.aboutAsks.Load()),
@@ -359,7 +415,7 @@ func (a *App) pushLocked() {
 		Duration: a.cfg.LimitDuration(),
 		Paused:   a.paused,
 	}
-	if !a.trusted.Load() {
+	if !a.trusted.Load() || a.reopen.Load() {
 		st.Mouse, st.Shift, st.Switch = false, false, false
 	}
 	a.sched.Update(st)

@@ -650,6 +650,9 @@ func menuRows(view control.View) []menuRow {
 		menuRow{id: "about", label: "About Catsitter"},
 		menuRow{id: "quit", label: "Quit"},
 	)
+	if view.Reopen {
+		return append([]menuRow{{id: "paused", label: "Quit and reopen to nudge"}}, rows...)
+	}
 	if view.Trusted {
 		return rows
 	}

@@ -67,11 +67,16 @@ func (h *Handle) Stop() {
 	end()
 }
 
+const (
+	pausedAccess = "Nudges paused: Catsitter needs Accessibility"
+	pausedReopen = "Nudges paused: quit and reopen Catsitter"
+)
+
 func (h *Handle) ready() {
 	defer survive("setup")
 	systray.SetIcon(menuBarIcon())
 	systray.SetTooltip("Catsitter")
-	paused := systray.AddMenuItem("Nudges paused: Catsitter needs Accessibility", "macOS Accessibility permission")
+	paused := systray.AddMenuItem(pausedAccess, "macOS Accessibility permission")
 	paused.Disable()
 	paused.Hide()
 	allow := systray.AddMenuItem("Allow Accessibility…", "Open the macOS permission settings")
@@ -138,10 +143,17 @@ func (h *Handle) ready() {
 					return
 				}
 				tip := "Catsitter"
-				if view.Trusted {
+				switch {
+				case view.Reopen:
+					paused.SetTitle(pausedReopen)
+					paused.Show()
+					allow.Hide()
+					tip = "Catsitter: nudges paused until you quit and reopen Catsitter"
+				case view.Trusted:
 					paused.Hide()
 					allow.Hide()
-				} else {
+				default:
+					paused.SetTitle(pausedAccess)
 					paused.Show()
 					allow.Show()
 					tip = "Catsitter: nudges paused until you allow Accessibility"

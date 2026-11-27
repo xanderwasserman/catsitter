@@ -81,7 +81,7 @@ The installer starts Catsitter for you. After that, open it like any other app: 
 
 ### macOS
 
-Catsitter needs Accessibility permission to move the mouse and press Shift. On first launch it explains why and offers an **Open Settings** button. Clicking it adds Catsitter to System Settings → Privacy & Security → Accessibility. If macOS then shows its own alert, choose **Open System Settings** there; otherwise Catsitter opens the list for you. Turn on the switch next to Catsitter. (On macOS 11 and 12 the same list is under System Preferences → Security & Privacy → Privacy → Accessibility.) You don't need to restart Catsitter: it checks the permission every two seconds and shows "Thanks! Catsitter can nudge now." once macOS reports it. The permission stays when you quit and reopen Catsitter.
+Catsitter needs Accessibility permission to move the mouse and press Shift. On first launch it explains why and offers an **Open Settings** button. Clicking it adds Catsitter to System Settings → Privacy & Security → Accessibility. If macOS then shows its own alert, choose **Open System Settings** there; otherwise Catsitter opens the list for you. Turn on the switch next to Catsitter. (On macOS 11 and 12 the same list is under System Preferences → Security & Privacy → Privacy → Accessibility.) Catsitter checks the permission every two seconds. Once macOS reports it, Catsitter quits and opens again by itself, because macOS may not let the running copy send nudges until it restarts, and the new copy shows "Thanks! Catsitter can nudge now." The permission stays when you quit and reopen Catsitter. If you turn the switch off while Catsitter runs, nudges pause within a few seconds, and turning it back on restarts Catsitter the same way. If Catsitter can't restart itself, both menus ask you to quit and reopen it, and nudges wait until you do.
 
 Until you allow it, Catsitter keeps the screen awake but skips the mouse and Shift nudges. The cat's menu and the menu-bar menu both say that nudges are paused, and both have an **Allow Accessibility** item that shows the explanation again.
 
@@ -202,7 +202,7 @@ go build -o catsitter ./cmd/catsitter
 
 A local build reports its version as `dev` and never checks for updates.
 
-macOS builds need CGO (it's on by default) and the Xcode Command Line Tools, because Catsitter uses IOKit, CoreGraphics and AppKit. A local build is a bare binary, not an app bundle, so macOS gives the Accessibility permission to the terminal you run it from. Linux and Windows builds don't need CGO, so you can cross-compile them:
+macOS builds need CGO (it's on by default) and the Xcode Command Line Tools, because Catsitter uses IOKit, CoreGraphics and AppKit. A local build is a bare binary, not an app bundle, so macOS gives the Accessibility permission to the terminal you run it from. A bare binary can't reopen itself after the grant, so it asks you to quit and run it again. Linux and Windows builds don't need CGO, so you can cross-compile them:
 
 ```sh
 CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -o catsitter.exe ./cmd/catsitter
