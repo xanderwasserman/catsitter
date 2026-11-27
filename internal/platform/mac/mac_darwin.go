@@ -45,10 +45,12 @@ static double csIdleSeconds(void) {
 	return CGEventSourceSecondsSinceLastEventType(kCGEventSourceStateHIDSystemState, kCGAnyInputEventType);
 }
 
-// csTrusted asks whether this process may post the mouse and key events that
-// nudges send. AXIsProcessTrusted can keep a stale answer in a running process.
+// csTrusted asks whether Catsitter is on in the Accessibility list, which is
+// the permission CGEventPost needs for the nudges. AXIsProcessTrusted follows
+// the switch while the app runs; CGPreflightPostEventAccess keeps the answer
+// it gave at launch.
 static int csTrusted(void) {
-	return CGPreflightPostEventAccess() ? 1 : 0;
+	return AXIsProcessTrusted() ? 1 : 0;
 }
 
 static void csMouse(double *x, double *y) {

@@ -104,3 +104,14 @@ func TestRequestAccessPromptsOnlyWhileMissing(t *testing.T) {
 		t.Fatalf("prompts after grant %d", p)
 	}
 }
+
+func TestTrustFollowsTheSwitchWhileRunning(t *testing.T) {
+	gate := &fakeGate{}
+	a := newTrustApp(gate)
+	for i, ok := range []bool{false, true, false, true} {
+		a.applyTrust(ok)
+		if got := a.View().Trusted; got != ok {
+			t.Fatalf("step %d: view trusted %v, want %v", i, got, ok)
+		}
+	}
+}
