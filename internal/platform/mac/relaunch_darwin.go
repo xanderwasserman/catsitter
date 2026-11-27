@@ -16,7 +16,8 @@ import (
 
 // relaunchScript waits up to 30 seconds for the old process to exit, then
 // opens the app through Launch Services with the same arguments. If that
-// fails it runs the app's executable directly.
+// fails and no copy of the app runs for this user, it runs the app's
+// executable directly.
 const relaunchScript = `pid=$1; app=$2; exe=$3; shift 3
 tries=150
 while kill -0 "$pid" 2>/dev/null; do
@@ -24,7 +25,8 @@ while kill -0 "$pid" 2>/dev/null; do
 	[ "$tries" -gt 0 ] || exit 1
 	sleep 0.2
 done
-if [ "$#" -gt 0 ]; then /usr/bin/open "$app" --args "$@"; else /usr/bin/open "$app"; fi || exec "$exe" "$@"`
+if [ "$#" -gt 0 ]; then /usr/bin/open "$app" --args "$@"; else /usr/bin/open "$app"; fi ||
+	/usr/bin/pgrep -x -U "$(id -u)" "${exe##*/}" >/dev/null || exec "$exe" "$@"`
 
 // relaunchMarkerAge is how long after Relaunch the new copy still counts as
 // relaunched.

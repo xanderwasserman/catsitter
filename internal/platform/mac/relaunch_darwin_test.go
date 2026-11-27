@@ -81,6 +81,24 @@ func TestRelaunchRunsTheExecutableWhenOpenFails(t *testing.T) {
 	}
 }
 
+func TestRelaunchSkipsTheExecutableWhenACopyRuns(t *testing.T) {
+	running := exec.Command("/bin/sleep", "5")
+	if err := running.Start(); err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		running.Process.Kill()
+		running.Wait()
+	}()
+	out, err := runHelper(t, 999999, "/bin/sleep", "false")
+	if err != nil {
+		t.Fatalf("helper failed: %v", err)
+	}
+	if out != "" {
+		t.Errorf("helper printed %q", out)
+	}
+}
+
 func TestFromRelaunch(t *testing.T) {
 	dead := func(int) bool { return false }
 	alive := func(int) bool { return true }

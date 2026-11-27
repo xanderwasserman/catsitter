@@ -51,10 +51,13 @@ type App struct {
 	relaunch  platform.Relauncher
 	// relaunched is set when relaunch started this process.
 	relaunched bool
+	// startedTrusted is set when the permission was there at launch.
+	startedTrusted bool
 	// reopen is set when nudges wait for the user to quit and reopen.
 	reopen atomic.Bool
-	// granting is set by a trusted poll that follows an untrusted one. The
-	// permission watch alone reads and writes it.
+	// granting is set by a trusted poll that follows an untrusted one, until
+	// the next poll confirms or drops it. The permission watch alone reads
+	// and writes it.
 	granting bool
 }
 
@@ -72,7 +75,8 @@ func New(live, saved config.Config, path string, b host.Backends, updates Update
 	}
 	a.relaunch = b.Relaunch
 	a.relaunched = b.Relaunch != nil && b.Relaunch.Relaunched()
-	a.trusted.Store(b.Gate == nil || b.Gate.Trusted())
+	a.startedTrusted = b.Gate == nil || b.Gate.Trusted()
+	a.trusted.Store(a.startedTrusted)
 	a.sched = scheduler.New(b.Idle, b.Nudge, b.Inhibit, nil, rand.IntN, func(t time.Time) {
 		a.lastNudge.Store(t.UnixNano())
 	})
@@ -146,9 +150,17 @@ func (a *App) applyTrust(ok bool) {
 	if a.quit.Load() {
 		return
 	}
-	was := a.trusted.Swap(ok)
+	was := a.trusted.Load()
+	if ok && !was && !a.granting {
+		// A grant counts once a second poll in a row confirms it. Until then
+		// Catsitter stays untrusted.
+		a.granting = true
+		return
+	}
+	confirmed := ok && !was
+	a.granting = false
+	a.trusted.Store(ok)
 	if !ok {
-		a.granting = false
 		a.reopen.Store(false)
 	}
 	a.mu.Lock()
@@ -165,11 +177,7 @@ func (a *App) applyTrust(ok bool) {
 	}
 	first := !a.settled.Swap(true)
 	switch {
-	case !was:
-		// A grant counts once a second poll in a row confirms it.
-		a.granting = true
-	case a.granting:
-		a.granting = false
+	case confirmed:
 		a.granted()
 	case first && a.relaunched:
 		log.Printf("accessibility permission granted; nudges are on")
@@ -178,14 +186,15 @@ func (a *App) applyTrust(ok bool) {
 }
 
 // granted acts on a permission that arrived while this process runs. macOS
-// may keep event posting blocked for the process, so Catsitter relaunches
-// once. A copy that was itself relaunched asks the user to reopen it instead.
+// may keep event posting blocked for the process, so Catsitter relaunches. A
+// relaunched copy that started untrusted asks the user to reopen it instead,
+// so relaunches cannot repeat.
 func (a *App) granted() {
 	switch {
 	case a.relaunch == nil:
 		log.Printf("accessibility permission granted; nudges are on")
 		a.gate.Granted()
-	case !a.relaunched && a.relaunch.Relaunch():
+	case !(a.relaunched && !a.startedTrusted) && a.relaunch.Relaunch():
 		log.Printf("accessibility permission granted; restarting so nudges can post")
 		a.Quit()
 	default:
