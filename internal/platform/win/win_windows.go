@@ -12,10 +12,6 @@ import (
 )
 
 const (
-	esContinuous      = 0x80000000
-	esSystemRequired  = 0x00000001
-	esDisplayRequired = 0x00000002
-
 	inputMouse    = 0
 	inputKeyboard = 1
 
@@ -34,7 +30,9 @@ var (
 	procSendInput          = user32.NewProc("SendInput")
 	procGetLastInputInfo   = user32.NewProc("GetLastInputInfo")
 	procGetTickCount       = kernel32.NewProc("GetTickCount")
-	procSetThreadExecState = kernel32.NewProc("SetThreadExecutionState")
+	procPowerCreateRequest = kernel32.NewProc("PowerCreateRequest")
+	procPowerSetRequest    = kernel32.NewProc("PowerSetRequest")
+	procPowerClearRequest  = kernel32.NewProc("PowerClearRequest")
 )
 
 type lastInputInfo struct {
@@ -42,27 +40,48 @@ type lastInputInfo struct {
 	DwTime uint32
 }
 
-// Inhibitor uses SetThreadExecutionState for system and display sleep.
-type Inhibitor struct{ held bool }
+// NewInhibitor keeps the system and display awake with a power request.
+func NewInhibitor() *PowerInhibitor {
+	return NewPowerInhibitor(powerAPI{})
+}
 
-func (i *Inhibitor) Acquire() error {
-	if i.held {
-		return nil
+const powerRequestContextSimpleString = 0x1
+
+// reasonContext is REASON_CONTEXT with a simple reason string. pad covers
+// the larger detailed-string member of the union.
+type reasonContext struct {
+	Version uint32
+	Flags   uint32
+	Reason  *uint16
+	pad     [2]uintptr
+}
+
+type powerAPI struct{}
+
+func (powerAPI) Create() (uintptr, error) {
+	reason, err := windows.UTF16PtrFromString("Catsitter keeps the computer awake")
+	if err != nil {
+		return 0, err
 	}
-	r, _, err := procSetThreadExecState.Call(uintptr(esContinuous | esSystemRequired | esDisplayRequired))
-	if r == 0 {
-		return fmt.Errorf("SetThreadExecutionState: %v", err)
+	ctx := reasonContext{Flags: powerRequestContextSimpleString, Reason: reason}
+	h, _, err := procPowerCreateRequest.Call(uintptr(unsafe.Pointer(&ctx)))
+	if windows.Handle(h) == windows.InvalidHandle || h == 0 {
+		return 0, err
 	}
-	i.held = true
+	return h, nil
+}
+
+func (powerAPI) Set(h uintptr, kind PowerKind) error {
+	if r, _, err := procPowerSetRequest.Call(h, uintptr(kind)); r == 0 {
+		return err
+	}
 	return nil
 }
 
-func (i *Inhibitor) Release() error {
-	if !i.held {
-		return nil
+func (powerAPI) Clear(h uintptr, kind PowerKind) error {
+	if r, _, err := procPowerClearRequest.Call(h, uintptr(kind)); r == 0 {
+		return err
 	}
-	_, _, _ = procSetThreadExecState.Call(uintptr(esContinuous))
-	i.held = false
 	return nil
 }
 

@@ -132,7 +132,7 @@ Drag the cat to move it. It remembers where you left it. Press Escape or click s
 
 | Action | Default | What it does |
 | --- | --- | --- |
-| Keep awake | on | Holds a sleep inhibitor so the system and display stay awake. It's held the whole time Catsitter runs, whether you're idle or not. |
+| Keep awake | on | Holds a sleep inhibitor so the system and display stay awake. It's held whether you're idle or not, and dropped while Catsitter is paused. |
 | Mouse jiggle | on | Moves the pointer 1 pixel and back when you're idle. |
 | Shift tap | on | Taps the Shift key when you're idle. |
 | Switch windows | off | Presses Cmd+Tab on macOS, or Alt+Tab on Windows and Linux, when you're idle. |

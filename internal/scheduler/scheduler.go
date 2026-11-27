@@ -1,6 +1,6 @@
 // Package scheduler decides when to nudge an idle machine.
 // It never posts input while the user is active. The sleep inhibitor,
-// when enabled, stays held for the whole running session.
+// when enabled, is held while watching and dropped while paused.
 package scheduler
 
 import (
