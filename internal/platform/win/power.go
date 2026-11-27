@@ -5,90 +5,93 @@ import (
 	"fmt"
 )
 
-// PowerKind is a POWER_REQUEST_TYPE value.
-type PowerKind uint32
+// powerKind is a POWER_REQUEST_TYPE value.
+type powerKind uint32
 
 const (
-	PowerDisplayRequired PowerKind = 0
-	PowerSystemRequired  PowerKind = 1
+	powerDisplayRequired powerKind = 0
+	powerSystemRequired  powerKind = 1
 )
 
-func (k PowerKind) String() string {
+func (k powerKind) String() string {
 	switch k {
-	case PowerDisplayRequired:
+	case powerDisplayRequired:
 		return "display"
-	case PowerSystemRequired:
+	case powerSystemRequired:
 		return "system"
 	}
 	return fmt.Sprintf("kind %d", uint32(k))
 }
 
-// PowerRequests is the part of the Windows power request API the inhibitor uses.
-// A request handle belongs to the process, so any thread may set or clear it.
-type PowerRequests interface {
-	Create() (uintptr, error)
-	Set(h uintptr, kind PowerKind) error
-	Clear(h uintptr, kind PowerKind) error
+// powerRequests is the part of the Windows power request API the inhibitor
+// uses. A request handle belongs to the process, so any thread may use it.
+// Closing the handle drops every request still set on it.
+type powerRequests interface {
+	create() (uintptr, error)
+	set(h uintptr, kind powerKind) error
+	clear(h uintptr, kind powerKind) error
+	close(h uintptr) error
 }
 
-var powerKinds = [...]PowerKind{PowerDisplayRequired, PowerSystemRequired}
+var powerKinds = [...]powerKind{powerDisplayRequired, powerSystemRequired}
 
-// PowerInhibitor keeps the system and display awake with one power request
-// handle, created on first use. Each kind is set at most once, so repeated
-// Acquire and Release calls never stack requests.
-type PowerInhibitor struct {
-	api    PowerRequests
+// powerInhibitor keeps the system and display awake with one power request
+// handle per hold. Each kind is set at most once, so repeated Acquire and
+// Release calls never stack requests.
+type powerInhibitor struct {
+	api    powerRequests
 	handle uintptr
-	set    map[PowerKind]bool
+	set    map[powerKind]bool
 }
 
-func NewPowerInhibitor(api PowerRequests) *PowerInhibitor {
-	return &PowerInhibitor{api: api, set: map[PowerKind]bool{}}
+func newPowerInhibitor(api powerRequests) *powerInhibitor {
+	return &powerInhibitor{api: api, set: map[powerKind]bool{}}
 }
 
-// Acquire sets every kind. If one fails, the kinds it set are cleared again.
-func (p *PowerInhibitor) Acquire() error {
+// Acquire sets every kind. If one fails, everything is released again.
+func (p *powerInhibitor) Acquire() error {
 	if p.handle == 0 {
-		h, err := p.api.Create()
+		h, err := p.api.create()
 		if err != nil {
 			return fmt.Errorf("PowerCreateRequest: %w", err)
 		}
 		p.handle = h
 	}
-	var added []PowerKind
 	for _, k := range powerKinds {
 		if p.set[k] {
 			continue
 		}
-		if err := p.api.Set(p.handle, k); err != nil {
-			errs := []error{fmt.Errorf("PowerSetRequest %s: %w", k, err)}
-			for _, a := range added {
-				errs = append(errs, p.clear(a))
-			}
-			return errors.Join(errs...)
+		if err := p.api.set(p.handle, k); err != nil {
+			return errors.Join(fmt.Errorf("PowerSetRequest %s: %w", k, err), p.Release())
 		}
 		p.set[k] = true
-		added = append(added, k)
 	}
 	return nil
 }
 
-// Release clears every kind that is set. A kind that fails to clear stays
-// recorded, so the next Release tries it again.
-func (p *PowerInhibitor) Release() error {
+// Release clears every kind that is set and closes the handle. Clear
+// failures are reported even when closing the handle dropped the request.
+// Whatever is still held after a failure is tried again on the next Release.
+func (p *powerInhibitor) Release() error {
+	if p.handle == 0 {
+		return nil
+	}
 	var errs []error
 	for _, k := range powerKinds {
-		if p.set[k] {
-			errs = append(errs, p.clear(k))
+		if !p.set[k] {
+			continue
 		}
+		if err := p.api.clear(p.handle, k); err != nil {
+			errs = append(errs, fmt.Errorf("PowerClearRequest %s: %w", k, err))
+			continue
+		}
+		delete(p.set, k)
+	}
+	if err := p.api.close(p.handle); err != nil {
+		errs = append(errs, fmt.Errorf("CloseHandle: %w", err))
+	} else {
+		p.handle = 0
+		clear(p.set)
 	}
 	return errors.Join(errs...)
-}
-
-func (p *PowerInhibitor) clear(k PowerKind) error {
-	if err := p.api.Clear(p.handle, k); err != nil {
-		return fmt.Errorf("PowerClearRequest %s: %w", k, err)
-	}
-	delete(p.set, k)
-	return nil
 }

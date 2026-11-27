@@ -41,11 +41,14 @@ type lastInputInfo struct {
 }
 
 // NewInhibitor keeps the system and display awake with a power request.
-func NewInhibitor() *PowerInhibitor {
-	return NewPowerInhibitor(powerAPI{})
+func NewInhibitor() platform.Inhibitor {
+	return newPowerInhibitor(powerAPI{})
 }
 
-const powerRequestContextSimpleString = 0x1
+const (
+	powerRequestContextVersion      = 0
+	powerRequestContextSimpleString = 0x1
+)
 
 // reasonContext is REASON_CONTEXT with a simple reason string. pad covers
 // the larger detailed-string member of the union.
@@ -58,12 +61,12 @@ type reasonContext struct {
 
 type powerAPI struct{}
 
-func (powerAPI) Create() (uintptr, error) {
+func (powerAPI) create() (uintptr, error) {
 	reason, err := windows.UTF16PtrFromString("Catsitter keeps the computer awake")
 	if err != nil {
 		return 0, err
 	}
-	ctx := reasonContext{Flags: powerRequestContextSimpleString, Reason: reason}
+	ctx := reasonContext{Version: powerRequestContextVersion, Flags: powerRequestContextSimpleString, Reason: reason}
 	h, _, err := procPowerCreateRequest.Call(uintptr(unsafe.Pointer(&ctx)))
 	if windows.Handle(h) == windows.InvalidHandle || h == 0 {
 		return 0, err
@@ -71,18 +74,22 @@ func (powerAPI) Create() (uintptr, error) {
 	return h, nil
 }
 
-func (powerAPI) Set(h uintptr, kind PowerKind) error {
+func (powerAPI) set(h uintptr, kind powerKind) error {
 	if r, _, err := procPowerSetRequest.Call(h, uintptr(kind)); r == 0 {
 		return err
 	}
 	return nil
 }
 
-func (powerAPI) Clear(h uintptr, kind PowerKind) error {
+func (powerAPI) clear(h uintptr, kind powerKind) error {
 	if r, _, err := procPowerClearRequest.Call(h, uintptr(kind)); r == 0 {
 		return err
 	}
 	return nil
+}
+
+func (powerAPI) close(h uintptr) error {
+	return windows.CloseHandle(windows.Handle(h))
 }
 
 // IdleTime uses GetLastInputInfo.

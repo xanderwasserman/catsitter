@@ -28,7 +28,7 @@ func onThread(f func() error) error {
 }
 
 func TestInhibitorReleasesFromAnotherThread(t *testing.T) {
-	p := NewInhibitor()
+	p := newPowerInhibitor(powerAPI{})
 	for range 3 {
 		if err := onThread(p.Acquire); err != nil {
 			t.Fatalf("acquire: %v", err)
@@ -36,8 +36,8 @@ func TestInhibitorReleasesFromAnotherThread(t *testing.T) {
 		if err := onThread(p.Release); err != nil {
 			t.Fatalf("release: %v", err)
 		}
-		if len(p.set) != 0 {
-			t.Fatalf("still set after release: %v", p.set)
+		if p.handle != 0 || len(p.set) != 0 {
+			t.Fatalf("still held after release: handle %#x set %v", p.handle, p.set)
 		}
 	}
 }
