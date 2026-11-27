@@ -23,6 +23,7 @@ const (
 	askOpen      = "Open Settings"
 	askLater     = "Not Now"
 	grantedNote  = "Thanks! Catsitter can nudge now."
+	reopenNote   = "Thanks! Quit and reopen Catsitter to start nudging."
 )
 
 // Prompt explains why Accessibility is needed and offers its settings page.
@@ -49,10 +50,15 @@ func askText() string {
 }
 
 // Granted closes the explanation and shows a short note that nudges are on.
-func Granted() {
+func Granted() { note(grantedNote) }
+
+// Reopen closes the explanation and asks the user to quit and reopen Catsitter.
+func Reopen() { note(reopenNote) }
+
+func note(s string) {
 	Post(func() {
 		C.csCloseAccess()
-		text := C.CString(grantedNote)
+		text := C.CString(s)
 		defer C.free(unsafe.Pointer(text))
 		C.csToast(text)
 	})

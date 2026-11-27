@@ -13,6 +13,7 @@ type fakeGate struct {
 	trusted bool
 	prompts int
 	granted int
+	reopens int
 }
 
 func (g *fakeGate) Trusted() bool {
@@ -31,6 +32,12 @@ func (g *fakeGate) Granted() {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	g.granted++
+}
+
+func (g *fakeGate) Reopen() {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	g.reopens++
 }
 
 func (g *fakeGate) counts() (prompts, granted int) {
@@ -105,13 +112,112 @@ func TestRequestAccessPromptsOnlyWhileMissing(t *testing.T) {
 	}
 }
 
-func TestTrustFollowsTheSwitchWhileRunning(t *testing.T) {
+type fakeRelauncher struct {
+	mu         sync.Mutex
+	works      bool
+	relaunched bool
+	calls      int
+}
+
+func (r *fakeRelauncher) Relaunch() bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.calls++
+	return r.works
+}
+
+func (r *fakeRelauncher) Relaunched() bool { return r.relaunched }
+
+func (r *fakeRelauncher) count() int {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.calls
+}
+
+func newRelaunchApp(gate *fakeGate, r *fakeRelauncher) *App {
+	return New(config.Defaults(), config.Defaults(), "", host.Backends{Gate: gate, Relaunch: r}, nil)
+}
+
+func TestGrantWhileRunningRelaunchesOnce(t *testing.T) {
 	gate := &fakeGate{}
-	a := newTrustApp(gate)
-	for i, ok := range []bool{false, true, false, true} {
-		a.applyTrust(ok)
-		if got := a.View().Trusted; got != ok {
-			t.Fatalf("step %d: view trusted %v, want %v", i, got, ok)
+	r := &fakeRelauncher{works: true}
+	a := newRelaunchApp(gate, r)
+	a.applyTrust(false)
+	a.applyTrust(true)
+	a.applyTrust(true)
+	a.applyTrust(false)
+	a.applyTrust(true)
+	if n := r.count(); n != 1 {
+		t.Fatalf("relaunches %d", n)
+	}
+	if !a.View().Quitting {
+		t.Fatal("app keeps running after the relaunch was arranged")
+	}
+	if _, g := gate.counts(); g != 0 {
+		t.Fatalf("granted %d before the relaunch", g)
+	}
+}
+
+func TestStartedTrustedNeverRelaunches(t *testing.T) {
+	gate := &fakeGate{trusted: true}
+	r := &fakeRelauncher{works: true}
+	a := newRelaunchApp(gate, r)
+	a.applyTrust(true)
+	a.applyTrust(false)
+	a.applyTrust(true)
+	if n := r.count(); n != 0 {
+		t.Fatalf("relaunches %d", n)
+	}
+	if a.View().Quitting {
+		t.Fatal("app quit")
+	}
+}
+
+func TestRevokeNeverRelaunches(t *testing.T) {
+	gate := &fakeGate{trusted: true}
+	r := &fakeRelauncher{works: true}
+	a := newRelaunchApp(gate, r)
+	a.applyTrust(true)
+	a.applyTrust(false)
+	a.applyTrust(false)
+	if n := r.count(); n != 0 {
+		t.Fatalf("relaunches %d", n)
+	}
+	if a.View().Trusted {
+		t.Fatal("view reports trusted after the revoke")
+	}
+}
+
+func TestRelaunchedCopyThanksAndNeverRelaunches(t *testing.T) {
+	for _, startTrusted := range []bool{true, false} {
+		gate := &fakeGate{trusted: startTrusted}
+		r := &fakeRelauncher{works: true, relaunched: true}
+		a := newRelaunchApp(gate, r)
+		a.applyTrust(startTrusted)
+		a.applyTrust(true)
+		if n := r.count(); n != 0 {
+			t.Fatalf("started trusted %v: relaunches %d", startTrusted, n)
 		}
+		if _, g := gate.counts(); g != 1 {
+			t.Fatalf("started trusted %v: granted %d", startTrusted, g)
+		}
+	}
+}
+
+func TestGrantAsksToReopenWhenRelaunchIsUnavailable(t *testing.T) {
+	gate := &fakeGate{}
+	r := &fakeRelauncher{}
+	a := newRelaunchApp(gate, r)
+	a.applyTrust(false)
+	a.applyTrust(true)
+	a.applyTrust(true)
+	if a.View().Quitting {
+		t.Fatal("app quit without a relaunch")
+	}
+	gate.mu.Lock()
+	reopens, granted := gate.reopens, gate.granted
+	gate.mu.Unlock()
+	if reopens != 1 || granted != 0 {
+		t.Fatalf("reopens %d, granted %d", reopens, granted)
 	}
 }

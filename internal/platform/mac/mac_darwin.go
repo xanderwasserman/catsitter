@@ -45,10 +45,8 @@ static double csIdleSeconds(void) {
 	return CGEventSourceSecondsSinceLastEventType(kCGEventSourceStateHIDSystemState, kCGAnyInputEventType);
 }
 
-// csTrusted asks whether Catsitter is on in the Accessibility list, which is
-// the permission CGEventPost needs for the nudges. AXIsProcessTrusted follows
-// the switch while the app runs; CGPreflightPostEventAccess keeps the answer
-// it gave at launch.
+// csTrusted reports whether macOS counts this process as trusted for
+// Accessibility.
 static int csTrusted(void) {
 	return AXIsProcessTrusted() ? 1 : 0;
 }
@@ -108,7 +106,7 @@ func IdleTime() (time.Duration, error) {
 	return time.Duration(secs * float64(time.Second)), nil
 }
 
-// Trusted reports whether Accessibility permission allows posting events.
+// Trusted reports whether Catsitter is on in the Accessibility list.
 func Trusted() bool { return C.csTrusted() == 1 }
 
 const (

@@ -48,6 +48,9 @@ type App struct {
 	settled   atomic.Bool
 	updates   Updates
 	aboutAsks atomic.Int64
+	relaunch  platform.Relauncher
+	// relaunched is set when relaunch started this process.
+	relaunched bool
 }
 
 // New prepares a session. live is what this run uses, including one-off
@@ -62,6 +65,8 @@ func New(live, saved config.Config, path string, b host.Backends, updates Update
 		closeFn: b.Close,
 		updates: updates,
 	}
+	a.relaunch = b.Relaunch
+	a.relaunched = b.Relaunch != nil && b.Relaunch.Relaunched()
 	a.trusted.Store(b.Gate == nil || b.Gate.Trusted())
 	a.sched = scheduler.New(b.Idle, b.Nudge, b.Inhibit, nil, rand.IntN, func(t time.Time) {
 		a.lastNudge.Store(t.UnixNano())
@@ -139,9 +144,8 @@ func (a *App) applyTrust(ok bool) {
 	a.pushLocked()
 	a.mu.Unlock()
 	if ok {
-		if !a.settled.Swap(true) && !was {
-			log.Printf("accessibility permission granted; nudges are on")
-			a.gate.Granted()
+		if !a.settled.Swap(true) {
+			a.welcome(was)
 		}
 		return
 	}
@@ -150,6 +154,27 @@ func (a *App) applyTrust(ok bool) {
 	}
 	log.Printf("accessibility permission is missing; nudges wait, the sleep inhibitor still runs")
 	a.gate.Prompt()
+}
+
+// welcome runs once, the first time the permission is seen. started is
+// whether it was there when this process started. A grant that arrives while
+// running relaunches Catsitter, so nudges start from a process that has it.
+func (a *App) welcome(started bool) {
+	switch {
+	case a.relaunched:
+		log.Printf("accessibility permission granted; nudges are on")
+		a.gate.Granted()
+	case started:
+	case a.relaunch == nil:
+		log.Printf("accessibility permission granted; nudges are on")
+		a.gate.Granted()
+	case a.relaunch.Relaunch():
+		log.Printf("accessibility permission granted; restarting so nudges can post")
+		a.Quit()
+	default:
+		log.Printf("accessibility permission granted; quit and reopen Catsitter so nudges can post")
+		a.gate.Reopen()
+	}
 }
 
 // RequestAccess shows the permission explanation again while it is missing.

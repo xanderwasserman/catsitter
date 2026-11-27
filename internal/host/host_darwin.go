@@ -9,8 +9,14 @@ type macGate struct{}
 func (macGate) Trusted() bool { return mac.Trusted() }
 func (macGate) Prompt()       { mac.Prompt() }
 func (macGate) Granted()      { mac.Granted() }
+func (macGate) Reopen()       { mac.Reopen() }
 
-// Open wires CoreGraphics, IOKit, and the Accessibility check.
+type macRelauncher struct{}
+
+func (macRelauncher) Relaunch() bool   { return mac.Relaunch() }
+func (macRelauncher) Relaunched() bool { return mac.Relaunched() }
+
+// Open wires CoreGraphics, IOKit, the Accessibility check, and the relaunch.
 func Open() Backends {
 	front := &mac.Front{}
 	return Backends{
@@ -18,6 +24,7 @@ func Open() Backends {
 		Nudge:        mac.Nudger{},
 		Inhibit:      mac.Inhibitor{},
 		Gate:         macGate{},
+		Relaunch:     macRelauncher{},
 		Close:        func() {},
 		Pump:         mac.Drain,
 		Overlay:      mac.ExcludeFromSwitcher,
